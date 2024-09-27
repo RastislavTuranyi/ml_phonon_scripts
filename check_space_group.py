@@ -5,15 +5,29 @@ import os
 
 TOP_DIR = os.path.dirname(os.path.abspath(__file__))
 HOME_DIR = os.path.join(TOP_DIR, 'data', 'optimised')
-CELL_DIR = os.path.join(HOME_DIR, 'cell')
-NO_DIR = os.path.join(HOME_DIR, 'no_cell')
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cell', action='store_true', help='If provided, the cell parameters are optimised')
+    parser.add_argument('-a', '--arch', type=str, default='mace_mp',
+                        help='The "--arch" parameter for Janus.')
+    parser.add_argument('-mp', '--model-path', type=str, default='large',
+                        help='The "--model-path" parameter for Janus.')
     args = parser.parse_args()
 
-    target_dir = CELL_DIR if args.cell else NO_DIR
+    if os.path.exists(args.model_path):
+        p = os.path.split(args.model_path)[-1]
+        target_dir = os.path.join(HOME_DIR, '_'.join([args.arch, p]))
+    else:
+        target_dir = os.path.join(HOME_DIR, '_'.join([args.arch, args.model_path]))
+
+    if args.cell:
+        cell = '--opt-cell-lengths'
+        target_dir = os.path.join(target_dir, 'cell')
+    else:
+        cell = '--no-opt-cell-lengths'
+        target_dir = os.path.join(target_dir, 'no_cell')
 
     files = sorted(glob.glob(os.path.join(target_dir, 'extra_data', '*', '*-log.yml')))
     #print(os.path.join(target_dir, 'extra_data', '*', '*-log.yaml'))
