@@ -65,13 +65,14 @@ if __name__ == '__main__':
         work_dir = os.path.join(dest_dir, name)
         
         if args.restart:
+            print(f'Redoing {name} from scratch')
             rmtree(work_dir)
         else:
             if glob.glob(os.path.join(work_dir, '*force_constants*')):
-                print('Skipping {name} because it is already complete')
+                print(f'Skipping {name} because it is already complete')
                 continue
             else:
-                print(os.path.join(work_dir, '*force_constants'))
+                print(f'Redoing {name} because previous calculation did not complete')
                 rmtree(work_dir)
 
         os.makedirs(work_dir)

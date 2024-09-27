@@ -39,9 +39,11 @@ if __name__ == '__main__':
 
         if os.path.exists(out_path):
             if args.restart:
+                print(f'Redoing {name} from scratch')
                 rmtree(out_path)
                 rmtree(out_dir)
             else:
+                print(f'Skipping {name} because it is already complete')
                 continue
 
         os.makedirs(out_dir)
