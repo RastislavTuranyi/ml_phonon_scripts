@@ -98,7 +98,7 @@ if __name__ == '__main__':
                      '--arch', args.arch,
                      '--model-path', args.model_path,
                      '--calc-kwargs', '{"dispersion": True}',
-                     '--bands', '--dos', '--plot-to-file']
+                     '--bands', '--plot-to-file']
         
         try:
             result = subprocess.run(base_args + ['--device', 'cuda'], check=True)
