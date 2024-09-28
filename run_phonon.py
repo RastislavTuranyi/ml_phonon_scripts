@@ -85,8 +85,11 @@ if __name__ == '__main__':
                 print(f'Skipping {name} because it is already complete')
                 continue
             else:
-                print(f'Redoing {name} because previous calculation did not complete')
-                rmtree(work_dir)
+                try:
+                    rmtree(work_dir)
+                    print(f'Redoing {name} because previous calculation did not complete')
+                except FileNotFoundError:
+                    pass
 
         os.makedirs(work_dir)
         os.chdir(work_dir)
