@@ -98,7 +98,8 @@ if __name__ == '__main__':
                      '--arch', args.arch,
                      '--model-path', args.model_path,
                      '--calc-kwargs', '{"dispersion": True}',
-                     '--bands', '--plot-to-file']
+                     '--bands', '--plot-to-file',
+                     '--file-prefix', name]
         
         try:
             result = subprocess.run(base_args + ['--device', 'cuda'], check=True)
@@ -107,4 +108,5 @@ if __name__ == '__main__':
             subprocess.run(base_args + ['--device', 'cpu'])
 
         os.chdir(HOME_DIR)
-        print('FINISHED')
+
+    print('FINISHED')

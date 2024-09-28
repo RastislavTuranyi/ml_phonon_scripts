@@ -42,4 +42,5 @@ if __name__ == '__main__':
 
         os.rename(os.path.join(out_dir, 'PPOSCAR'), out_file)
         os.chdir(DATA_DIR)
-        print('FINISHED')
+
+    print('FINISHED')

@@ -71,4 +71,5 @@ if __name__ == '__main__':
                         '--fmax', str(FMAX)])
 
         os.chdir(DATA_DIR)
-        print('FINISHED')
+
+    print('FINISHED')
