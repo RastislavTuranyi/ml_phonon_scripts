@@ -107,3 +107,4 @@ if __name__ == '__main__':
             subprocess.run(base_args + ['--device', 'cpu'])
 
         os.chdir(HOME_DIR)
+        print('FINISHED')
