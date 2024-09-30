@@ -30,11 +30,15 @@ if __name__ == '__main__':
     if not os.path.exists(EXTRA_DIR):
         os.makedirs(EXTRA_DIR)
 
+    skipped_vesta = 0
+
     for cif2cell_file, vesta_file in zip(cif2cell_files, vesta_files):
+        print('\n')
         cif2cell = read(cif2cell_file, format='vasp')
         vesta = read(vesta_file, format='vasp')
 
         if cif2cell == vesta:
+            print('Files identical; skipping VESTA')
             files = [cif2cell_file]
         else:
             files = [cif2cell_file, vesta_file]
@@ -42,6 +46,7 @@ if __name__ == '__main__':
         space_group_number = []
         for i, file in enumerate(files):
             name = os.path.split(file)[-1]
+            print(name)
 
             out_file = os.path.join(OUT_DIR, name)
             out_dir = os.path.join(EXTRA_DIR, name.replace('.vasp', ''))
@@ -51,7 +56,8 @@ if __name__ == '__main__':
                     rmtree(out_file)
                     rmtree(out_dir)
                 else:
-                    continue
+                    print('Skipping . . .')
+                    break
 
             os.makedirs(out_dir)
             copyfile(file, os.path.join(out_dir, 'POSCAR'))
@@ -68,11 +74,17 @@ if __name__ == '__main__':
             # Abandon VESTA file if the space group is conserved
             if i == 1:
                 if space_group_number[0] == space_group_number[1]:
+                    skipped_vesta += 1
+                    print(f'Space groups identical ({space_group_number[0]}); skipping VESTA.')
+
                     os.chdir(DATA_DIR)
                     rmtree(out_dir)
                     continue
+                else:
+                    print(f'Space groups different (cif2cell={space_group_number[0]}, vesta={space_group_number[1]}); '
+                          f'keeping both files.')
 
             os.rename(os.path.join(out_dir, 'PPOSCAR'), out_file)
             os.chdir(DATA_DIR)
 
-    print('FINISHED')
+    print(f'FINISHED, skipped {skipped_vesta} vesta files')
