@@ -18,6 +18,10 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--restart', action='store_true', help='Recomputes completed calculations')
     args = parser.parse_args()
 
+    if args.restart:
+        rmtree(OUT_DIR)
+        os.makedirs(OUT_DIR)
+
     files = sorted(glob.glob(os.path.join(DATA_DIR, 'vasp', '*.vasp')))
 
     cif2cell_files, vesta_files = [], []
@@ -52,12 +56,8 @@ if __name__ == '__main__':
             out_dir = os.path.join(EXTRA_DIR, name.replace('.vasp', ''))
 
             if os.path.exists(out_file):
-                if args.restart:
-                    os.remove(out_file)
-                    rmtree(out_dir)
-                else:
-                    print('Skipping . . .')
-                    break
+                print('Skipping . . .')
+                break
 
             os.makedirs(out_dir)
             copyfile(file, os.path.join(out_dir, 'POSCAR'))
