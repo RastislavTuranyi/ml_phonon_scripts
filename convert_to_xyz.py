@@ -2,8 +2,7 @@ import glob
 import os
 import subprocess
 
-from ase.io import read, write
-from ase.io.cif import read_cif
+from ase.io import read
 
 
 if __name__ == '__main__':
@@ -34,7 +33,8 @@ if __name__ == '__main__':
         except FileNotFoundError:
             continue
 
-        with open(os.path.join(out_path, name.replace('.cif', '.vasp')), 'w') as f:
+        out_cif2cell = os.path.join(out_path, name.replace('.cif', '.vasp'))
+        with open(out_cif2cell, 'w') as f:
             f.write(comment)
             f.writelines(table1)
             f.write(elements + '\n')
@@ -42,5 +42,14 @@ if __name__ == '__main__':
 
         os.remove(os.path.join(out_path, 'temp.vasp'))
 
-        # write(os.path.join(out_path, name.replace('.cif', '.xyz')),
-        #       data)
+        name2 = name.replace('.cif', '_vesta.vasp')
+        out_vesta = os.path.join(out_path, name2)
+        subprocess.run(['vesta.exe', '-nogui',
+                        '-i', file,
+                        '-save', 'format=VASP', 'option=cartesian', 'option=as_displayed', out_vesta])
+
+        cif2cell = read(out_cif2cell, format='vasp')
+        vesta = read(out_vesta, format='vasp')
+
+        if cif2cell == vesta:
+            os.remove(out_vesta)
