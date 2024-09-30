@@ -46,7 +46,9 @@ if __name__ == '__main__':
         out_vesta = os.path.join(out_path, name2)
         subprocess.run(['vesta.exe', '-nogui',
                         '-i', file,
-                        '-save', 'format=VASP', 'option=cartesian', out_vesta])
+                        '-merge_split_site',
+                        '-save', 'format=VASP', 'option=cartesian', out_vesta,
+                        ])
 
         # cif2cell = read(out_cif2cell, format='vasp')
         # vesta = read(out_vesta, format='vasp')
