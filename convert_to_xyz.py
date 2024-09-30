@@ -2,7 +2,7 @@ import glob
 import os
 import subprocess
 
-from ase.io import read
+# from ase.io import read
 
 
 if __name__ == '__main__':
@@ -48,8 +48,8 @@ if __name__ == '__main__':
                         '-i', file,
                         '-save', 'format=VASP', 'option=cartesian', 'option=as_displayed', out_vesta])
 
-        cif2cell = read(out_cif2cell, format='vasp')
-        vesta = read(out_vesta, format='vasp')
-
-        if cif2cell == vesta:
-            os.remove(out_vesta)
+        # cif2cell = read(out_cif2cell, format='vasp')
+        # vesta = read(out_vesta, format='vasp')
+        #
+        # if cif2cell == vesta:
+        #     os.remove(out_vesta)
