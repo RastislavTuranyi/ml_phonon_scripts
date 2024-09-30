@@ -53,7 +53,7 @@ if __name__ == '__main__':
 
             if os.path.exists(out_file):
                 if args.restart:
-                    rmtree(out_file)
+                    os.remove(out_file)
                     rmtree(out_dir)
                 else:
                     print('Skipping . . .')
