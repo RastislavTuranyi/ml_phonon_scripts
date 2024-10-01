@@ -12,21 +12,23 @@ HOME_DIR = os.path.join(TOP_DIR, 'data', 'optimised')
 
 
 def check_vesta(previous_file: str,
-                current_file: str,
                 current_name: str,
                 arch: str,
                 model_path: str,
-                remove_dir: str) -> None:
+                remove_dir: str,
+                main_dir: str) -> None:
     previous_name = os.path.split(os.path.dirname(previous_file))[-1].replace('.vasp','')
     current_name = current_name.replace('.vasp', '')
 
     if not (previous_name in current_name or current_name in previous_name):
         return
 
-    if previous_file[-10:] == 'vesta.vasp':
+    current_file = os.path.join(main_dir, current_name + '.vasp')
+    previous_file = os.path.join(main_dir, previous_name + '.vasp')
+    if previous_name[-6:] == '_vesta':
         vesta_file, vesta_name = previous_file, previous_name
         cif2cell_file, cif2cell_name = current_file, current_name
-    elif current_name[-10:] == 'vesta.vasp':
+    elif current_name[-6:] == '_vesta':
         vesta_file, vesta_name = current_file, current_name
         cif2cell_file, cif2cell_name = previous_file, previous_name
     else:
@@ -111,7 +113,7 @@ if __name__ == '__main__':
         with open(os.path.join(os.path.dirname(file), title), 'w') as f:
             f.write(before + '   ' + after)
 
-        check_vesta(previous_file, file, name, args.arch, args.model_path, duplicates_dir)
+        check_vesta(previous_file, name, args.arch, args.model_path, duplicates_dir, target_dir)
         previous_file = file
 
     with open(os.path.join(target_dir, 'spacegroup_check.csv'), 'w') as f:
