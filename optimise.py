@@ -204,7 +204,7 @@ if __name__ == '__main__':
         with open(os.path.join(out_dir, title), 'w') as f:
             f.write(optimiser.struct.info['initial_spacegroup'] + '   ' + optimiser.struct.info['final_spacegroup'])
 
-        np.save(os.path.join(out_path, 'final.npy'), np.array([energy, optimiser.dyn.fmax]))
+        np.save(os.path.join(out_path, 'final.npy'), np.array([energy / len(atoms), optimiser.dyn.fmax]))
 
         os.chdir(DATA_DIR)
 
