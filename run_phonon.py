@@ -107,8 +107,14 @@ if __name__ == '__main__':
         try:
             result = subprocess.run(base_args + ['--device', 'cuda'], check=True)
         except subprocess.CalledProcessError:
-            print('cuda run failed; retrying using CPU only')
-            subprocess.run(base_args + ['--device', 'cpu'])
+            print('cuda run failed; retrying using PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True')
+            try:
+                env = os.environ.copy()
+                env['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+                result = subprocess.run(base_args + ['--device', 'cuda'], check=True, env=env)
+            except subprocess.CalledProcessError:
+                print('cuda run failed again; retrying using CPU only')
+                subprocess.run(base_args + ['--device', 'cpu'])
 
         os.chdir(HOME_DIR)
 
