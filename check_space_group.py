@@ -34,9 +34,14 @@ def check_vesta(previous_file: str,
     else:
         return
 
-    energies, files = [], [cif2cell_file, vesta_file]
+    energies, files, names = [], [cif2cell_file, vesta_file], [cif2cell_name, vesta_name]
 
-    for file in files:
+    for file, name in zip(files, names):
+        npy = os.path.join(os.path.dirname(file), 'extra_data', name, 'final.npy')
+        if os.path.exists(npy):
+            energies.append(np.load(npy)[0])
+            continue
+
         atoms = read(file, format='vasp')
         sp = SinglePoint(struct=atoms,
                          arch=arch,
