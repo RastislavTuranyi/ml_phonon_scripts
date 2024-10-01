@@ -17,6 +17,45 @@ TARGET_DIR = os.path.join(DATA_DIR, 'optimised')
 FMAX = 1e-6
 
 
+def recompute_changed(original_file: str,
+                      original_dir: str,
+                      original_name: str,
+                      source_file: str,
+                      cell: bool,
+                      arch: str,
+                      model_path: str,
+                      fkwargs: dict):
+    os.rename(original_file, os.path.join(original_dir, original_name))
+    os.rename(original_dir, original_dir + '_changed')
+
+    atoms = read(source_file, format='vasp')
+    atoms.set_constraint(FixSymmetry(atoms=atoms, adjust_positions=True, adjust_cell=cell))
+    optimiser = GeomOpt(struct=atoms,
+                        arch=arch,
+                        device='cuda',
+                        model_path=model_path,
+                        calc_kwargs={'dispersion': True},
+                        attach_logger=True,
+                        fmax=FMAX,
+                        write_results=True,
+                        filter_kwargs=fkwargs)
+    result = optimiser.run()
+
+    if optimiser.struct.info['initial_spacegroup'] == optimiser.struct.info['final_spacegroup']:
+        title = 'spacegroup_conserved'
+    else:
+        print('Space group changed despite ASE constraint')
+        title = 'spacegroup_changed'
+
+    write(original_dir, optimiser.struct, format='vasp')
+
+    with open(os.path.join(original_dir, title), 'w') as f:
+        f.write(optimiser.struct.info['initial_spacegroup'] + '   ' + optimiser.struct.info['final_spacegroup'])
+
+    np.save(os.path.join(original_dir, 'final.npy'),
+            np.array([optimiser.struct.get_potential_energy(), optimiser.dyn.fmax]))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cell', action='store_true', help='If provided, the cell parameters are optimised')
@@ -26,6 +65,8 @@ if __name__ == '__main__':
     parser.add_argument('-mp', '--model-path', type=str, default='large',
                         help='The "--model-path" parameter for Janus.')
     args = parser.parse_args()
+
+    filter_kwargs = {'hydrostatic_strain': args.cell, 'scalar_pressure': 0.}
 
     if os.path.exists(args.model_path):
         p = os.path.split(args.model_path)[-1]
@@ -51,14 +92,14 @@ if __name__ == '__main__':
 
         if os.path.exists(out_path):
             print(f'Skipping {name} because it is already complete')
+            if os.path.exists(os.path.join(out_dir, 'spacegroup_changed')):
+                print('Recomputing data because space group in the original was changed')
+                recompute_changed(out_path, out_dir, name, file, args.cell, args.arch, args.model_path, filter_kwargs)
             continue
 
         os.makedirs(out_dir)
         copyfile(file, out_dir)
         os.chdir(out_dir)
-
-        filter_kwargs = {'hydrostatic_strain': args.cell,
-                         'scalar_pressure': 0.}
 
         atoms = read(file, format='vasp')
         optimiser = GeomOpt(struct=atoms,
@@ -103,7 +144,7 @@ if __name__ == '__main__':
 
         write(out_path, optimiser.struct, format='vasp')
 
-        with open(os.path.join(os.path.dirname(file), title), 'w') as f:
+        with open(os.path.join(out_dir, title), 'w') as f:
             f.write(optimiser.struct.info['initial_spacegroup'] + '   ' + optimiser.struct.info['final_spacegroup'])
 
         np.save(os.path.join(out_path, 'final.npy'), np.array([energy, optimiser.dyn.fmax]))
