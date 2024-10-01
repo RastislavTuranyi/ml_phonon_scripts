@@ -6,7 +6,10 @@ import subprocess
 
 from ase.constraints import FixSymmetry
 from ase.io import read, write
+
 from janus_core.calculations.geom_opt import GeomOpt
+from janus_core.calculations.single_point import SinglePoint
+
 import numpy as np
 
 
@@ -54,6 +57,60 @@ def recompute_changed(original_file: str,
 
     np.save(os.path.join(original_dir, 'final.npy'),
             np.array([optimiser.struct.get_potential_energy(), optimiser.dyn.fmax]))
+
+
+def check_cif2cell_vesta(save_dir: str, top_dir: str, arch: str, model_path: str):
+    print('Comparing cif2cell and vesta files')
+    vesta_files = glob.glob(os.path.join(save_dir, '*_vesta.vasp'))
+
+    duplicates_dir = os.path.join(top_dir, 'high_energy_structures')
+    if not os.path.exists(duplicates_dir):
+        os.makedirs(duplicates_dir)
+
+    for vesta_file in vesta_files:
+        cif2cell_file = vesta_file.replace('_vesta.vasp', '.vasp')
+        cif2cell_name = os.path.split(cif2cell_file)[-1].replace('.vasp', '')
+
+        print(cif2cell_name)
+        if not os.path.exists(cif2cell_file):
+            print('Skipping because equivalent cif2cell file does not exist (might have previously been moved)')
+            continue
+
+        vesta_name = os.path.split(vesta_file)[-1].replace('.vasp', '')
+        vesta_dir = os.path.join(vesta_file.replace('.vasp', ''), 'extra_data', vesta_name)
+
+        vesta_energy = os.path.join(vesta_dir, 'final.npy')
+        if os.path.exists(vesta_energy):
+            vesta_energy = np.load(vesta_energy)[0]
+        else:
+            vesta_energy = compute_one_energy(vesta_file, arch, model_path)
+
+        cif2cell_dir = os.path.join(cif2cell_file.replace('.vasp', ''), 'extra_data', cif2cell_name)
+        cif2cell_energy = os.path.join(cif2cell_dir, 'final.npy')
+        if os.path.exists(cif2cell_energy):
+            cif2cell_energy = np.load(cif2cell_energy)[0]
+        else:
+            cif2cell_energy = compute_one_energy(cif2cell_file, arch, model_path)
+
+        if cif2cell_energy > vesta_energy:
+            print('VESTA file lower in energy')
+            os.rename(cif2cell_file, os.path.join(duplicates_dir, cif2cell_name + '.vasp'))
+        else:
+            os.rename(vesta_file, os.path.join(duplicates_dir, vesta_name + '.vasp'))
+            print('cif2cell file lower in energy')
+
+
+def compute_one_energy(file_path: str, arch: str, model_path: str) -> float:
+    atoms = read(file_path, format='vasp')
+    sp = SinglePoint(struct=atoms,
+                     arch=arch,
+                     device='cuda',
+                     model_path=model_path,
+                     calc_kwargs={'dispersion': True},
+                     properties='energy')
+
+    result = sp.run()
+    return result['energy'] / len(atoms)
 
 
 if __name__ == '__main__':
