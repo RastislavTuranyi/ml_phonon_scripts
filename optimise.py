@@ -33,12 +33,9 @@ if __name__ == '__main__':
     else:
         target_dir = os.path.join(TARGET_DIR, '_'.join([args.arch, args.model_path]))
 
-    if args.cell:
-        cell = '--opt-cell-lengths'
-        target_dir = os.path.join(target_dir, 'cell')
-    else:
-        cell = '--no-opt-cell-lengths'
-        target_dir = os.path.join(target_dir, 'no_cell')
+    if args.restart:
+        rmtree(target_dir)
+        os.makedirs(target_dir)
     
     extra_dir = os.path.join(target_dir, 'extra_data')
     if not os.path.exists(extra_dir):
@@ -53,13 +50,8 @@ if __name__ == '__main__':
         out_dir = os.path.join(extra_dir, name.replace('.vasp', ''))
 
         if os.path.exists(out_path):
-            if args.restart:
-                print(f'Redoing {name} from scratch')
-                rmtree(out_path)
-                rmtree(out_dir)
-            else:
-                print(f'Skipping {name} because it is already complete')
-                continue
+            print(f'Skipping {name} because it is already complete')
+            continue
 
         os.makedirs(out_dir)
         copyfile(file, out_dir)
