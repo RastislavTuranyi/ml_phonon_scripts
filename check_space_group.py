@@ -2,9 +2,58 @@ import argparse
 import glob
 import os
 
+from ase.io import read
+from janus_core.calculations.single_point import SinglePoint
+import numpy as np
+
 
 TOP_DIR = os.path.dirname(os.path.abspath(__file__))
 HOME_DIR = os.path.join(TOP_DIR, 'data', 'optimised')
+
+
+def check_vesta(previous_file: str,
+                current_file: str,
+                current_name: str,
+                arch: str,
+                model_path: str,
+                remove_dir: str) -> None:
+    previous_name = os.path.split(os.path.dirname(previous_file))[-1].replace('.vasp','')
+    current_name = current_name.replace('.vasp', '')
+
+    if not (previous_name in current_name or current_name in previous_name):
+        return
+
+    if previous_file[-10:] == 'vesta.vasp':
+        vesta_file, vesta_name = previous_file, previous_name
+        cif2cell_file, cif2cell_name = current_file, current_name
+    elif current_name[-10:] == 'vesta.vasp':
+        vesta_file, vesta_name = current_file, current_name
+        cif2cell_file, cif2cell_name = previous_file, previous_name
+    else:
+        return
+
+    energies, files = [], [cif2cell_file, vesta_file]
+
+    for file in files:
+        atoms = read(file, format='vasp')
+        sp = SinglePoint(struct=atoms,
+                         arch=arch,
+                         device='cuda',
+                         model_path=model_path,
+                         calc_kwargs={'dispersion': True},
+                         properties='energy')
+
+        result = sp.run()
+        energies.append(result['energy'] / len(atoms))
+
+    if energies[0] > energies[1]:
+        print('VESTA file lower in energy')
+        os.rename(cif2cell_file, os.path.join(remove_dir, cif2cell_name + '.vasp'))
+    else:
+        os.rename(vesta_file, os.path.join(remove_dir, vesta_name + '.vasp'))
+        print('cif2cell file lower in energy')
+
+    np.save(os.path.join(remove_dir, cif2cell_name + '.npy'), np.array(energies))
 
 
 if __name__ == '__main__':
@@ -29,14 +78,18 @@ if __name__ == '__main__':
         cell = '--no-opt-cell-lengths'
         target_dir = os.path.join(target_dir, 'no_cell')
 
+    duplicates_dir = os.path.join(target_dir, 'high_energy_structures')
+    if not os.path.exists(duplicates_dir):
+        os.makedirs(duplicates_dir)
+
     files = sorted(glob.glob(os.path.join(target_dir, 'extra_data', '*', '*-log.yml')))
-    #print(os.path.join(target_dir, 'extra_data', '*', '*-log.yaml'))
+
     results = []
+    previous_file = 'NONE'
     for file in files:
         before, after = None, None
         with open(file, 'r') as f:
             for line in f:
-                #print(line)
                 if 'Before optimisation spacegroup:' in line:
                     before = line.split('Before optimisation spacegroup:')[-1].replace('"', '').strip()
                 elif 'After optimization spacegroup:' in line:
@@ -51,12 +104,15 @@ if __name__ == '__main__':
         
         results.append(', '.join([name, str(before == after), before, after]))
         if before == after:
-            name = 'spacegroup_conserved'
+            title = 'spacegroup_conserved'
         else:
-            name = 'spacegroup_changed'
+            title = 'spacegroup_changed'
 
-        with open(os.path.join(os.path.dirname(file), name), 'w') as f:
+        with open(os.path.join(os.path.dirname(file), title), 'w') as f:
             f.write(before + '   ' + after)
+
+        check_vesta(previous_file, file, name, args.arch, args.model_path, duplicates_dir)
+        previous_file = file
 
     with open(os.path.join(target_dir, 'spacegroup_check.csv'), 'w') as f:
         f.writelines(results)
