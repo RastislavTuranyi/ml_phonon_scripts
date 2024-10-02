@@ -4,6 +4,8 @@ import os
 import subprocess
 from shutil import copyfile, rmtree
 
+from ase.io import read
+
 
 HOME_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HOME_DIR, 'data')
@@ -28,6 +30,33 @@ def is_symmetry_broken(path: str) -> bool:
             else: 
                 raise Exception()
     return before == after
+
+
+def has_symmetry_changed(src_dir: str, name: str) -> bool:
+    check_dir = os.path.join(src_dir, 'extra_data', name)
+    if os.path.exists(os.path.join(check_dir, 'spacegroup_changed')):
+        print(f'Skipping {name} because optimisation changed space group')
+        return True
+    elif not os.path.exists(os.path.join(check_dir, 'spacegroup_conserved')):
+        if is_symmetry_broken(check_dir):
+            print(f'Skipping {name} because optimisation changed space group')
+            return True
+
+    return False
+
+
+def is_calculation_complete(work_dir: str, name: str) -> bool:
+    if glob.glob(os.path.join(work_dir, '*force_constants*')):
+        print(f'Skipping {name} because it is already complete')
+        return True
+
+    try:
+        rmtree(work_dir)
+        print(f'Redoing {name} because previous calculation did not complete')
+    except FileNotFoundError:
+        pass
+
+    return False
 
 
 if __name__ == '__main__':
@@ -56,40 +85,23 @@ if __name__ == '__main__':
         src_dir = os.path.join(src_dir, 'no_cell')
         dest_dir = os.path.join(dest_dir, 'no_cell')
 
-    if not os.path.exists(dest_dir):
+    if args.restart:
+        rmtree(dest_dir)
         os.makedirs(dest_dir)
+    else:
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir)
 
     data_files = sorted(glob.glob(os.path.join(src_dir, '*.vasp')))
     #print(data_files)
     
     for file in data_files:
         name = os.path.split(file)[-1].replace('.vasp', '')
+        work_dir = os.path.join(dest_dir, name)
         print(name)
 
-        check_dir = os.path.join(src_dir, 'extra_data', name)
-        if os.path.exists(os.path.join(check_dir, 'spacegroup_changed')):
-            print(f'Skipping {name} because optimisation changed space group')
+        if has_symmetry_changed(src_dir, name) or is_calculation_complete(work_dir, name):
             continue
-        elif not os.path.exists(os.path.join(check_dir, 'spacegroup_conserved')):
-            if is_symmetry_broken(check_dir):
-                print(f'Skipping {name} because optimisation changed space group')
-                continue
-
-        work_dir = os.path.join(dest_dir, name)
-        
-        if args.restart:
-            print(f'Redoing {name} from scratch')
-            rmtree(work_dir)
-        else:
-            if glob.glob(os.path.join(work_dir, '*force_constants*')):
-                print(f'Skipping {name} because it is already complete')
-                continue
-            else:
-                try:
-                    rmtree(work_dir)
-                    print(f'Redoing {name} because previous calculation did not complete')
-                except FileNotFoundError:
-                    pass
 
         os.makedirs(work_dir)
         os.chdir(work_dir)
