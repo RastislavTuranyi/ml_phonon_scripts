@@ -5,6 +5,7 @@ import subprocess
 from shutil import copyfile, rmtree
 
 from ase.io import read
+import numpy as np
 
 
 HOME_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -59,6 +60,13 @@ def is_calculation_complete(work_dir: str, name: str) -> bool:
     return False
 
 
+def get_supercell(path: str) -> str:
+    atoms = read(path, format='vasp')
+
+    cell_lengths = atoms.cell.cellpar()[:3]
+    return 'x'.join(['1' if length > 20 else '2' for length in cell_lengths])
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cell', action='store_true',
@@ -109,7 +117,7 @@ if __name__ == '__main__':
 
         base_args = ['janus', 'phonons',
                      '--struct', './POSCAR',
-                     '--supercell', SUPERCELL,
+                     '--supercell', get_supercell(file),
                      '--arch', args.arch,
                      '--model-path', args.model_path,
                      '--calc-kwargs', '{"dispersion": True}',
