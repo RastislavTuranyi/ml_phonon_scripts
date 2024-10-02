@@ -4,6 +4,7 @@ import os
 from shutil import copyfile, rmtree
 import subprocess
 
+import ase
 from ase.constraints import FixSymmetry
 from ase.io import read, write
 
@@ -113,6 +114,20 @@ def compute_one_energy(file_path: str, arch: str, model_path: str) -> float:
     return result['energy'] / len(atoms)
 
 
+def run_geometry_optimisation(atoms: ase.Atoms, arch: str, model_path: str, filter_kwargs: dict):
+    optimiser = GeomOpt(struct=atoms,
+                        arch=arch,
+                        device='cuda',
+                        model_path=model_path,
+                        calc_kwargs={'dispersion': True},
+                        attach_logger=True,
+                        fmax=FMAX,
+                        write_results=True,
+                        filter_kwargs=filter_kwargs)
+    optimiser.run()
+    return optimiser
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cell', action='store_true', help='If provided, the cell parameters are optimised')
@@ -149,26 +164,21 @@ if __name__ == '__main__':
 
         if os.path.exists(out_path):
             print(f'Skipping {name} because it is already complete')
+
             if os.path.exists(os.path.join(out_dir, 'spacegroup_changed')):
                 print('Recomputing data because space group in the original was changed')
                 recompute_changed(out_path, out_dir, name, file, args.cell, args.arch, args.model_path, filter_kwargs)
+
             continue
+        elif os.path.exists(out_dir):
+            rmtree(out_dir)
 
         os.makedirs(out_dir)
         copyfile(file, out_dir)
         os.chdir(out_dir)
 
         atoms = read(file, format='vasp')
-        optimiser = GeomOpt(struct=atoms,
-                            arch=args.arch,
-                            device='cuda',
-                            model_path=args.model_path,
-                            calc_kwargs={'dispersion': True},
-                            attach_logger=True,
-                            fmax=FMAX,
-                            write_results=True,
-                            filter_kwargs=filter_kwargs)
-        result = optimiser.run()
+        optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_kwargs)
         energy = optimiser.struct.get_potential_energy()
 
         if optimiser.struct.info['initial_spacegroup'] != optimiser.struct.info['final_spacegroup']:
@@ -176,16 +186,7 @@ if __name__ == '__main__':
 
             atoms = read(file, format='vasp')
             atoms.set_constraint(FixSymmetry(atoms=atoms, adjust_positions=True, adjust_cell=args.cell))
-            optimiser = GeomOpt(struct=atoms,
-                                arch=args.arch,
-                                device='cuda',
-                                model_path=args.model_path,
-                                calc_kwargs={'dispersion': True},
-                                attach_logger=True,
-                                fmax=FMAX,
-                                write_results=True,
-                                filter_kwargs=filter_kwargs)
-            result = optimiser.run()
+            optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_kwargs)
 
             energy2 = optimiser.struct.get_potential_energy()
             print(f'Original energy: {energy}; new energy: {energy2}')
