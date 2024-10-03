@@ -174,10 +174,15 @@ if __name__ == '__main__':
 
             continue
         elif os.path.exists(out_dir):
+            if os.path.exists(os.path.join(target_dir, 'high_energy_structures', name)):
+                print('Skipping because the structure is already complete and has been placed to high_energy_structures')
+                continue
+
+            print('Previously, optimisiation was started but not finished; starting over')
             rmtree(out_dir)
 
         os.makedirs(out_dir)
-        copyfile(file, out_dir)
+        copyfile(file, os.path.join(out_dir, name))
         os.chdir(out_dir)
 
         atoms = read(file, format='vasp')
