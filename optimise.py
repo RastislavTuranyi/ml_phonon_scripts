@@ -146,6 +146,8 @@ if __name__ == '__main__':
     else:
         target_dir = os.path.join(TARGET_DIR, '_'.join([args.arch, args.model_path]))
 
+    target_dir = os.path.join(target_dir, 'cell') if args.cell else os.path.join(target_dir, 'no_cell')
+
     if args.restart:
         rmtree(target_dir)
         os.makedirs(target_dir)
@@ -158,6 +160,7 @@ if __name__ == '__main__':
 
     for file in files:
         name = os.path.split(file)[-1]
+        print(name)
 
         out_path = os.path.join(target_dir, name)
         out_dir = os.path.join(extra_dir, name.replace('.vasp', ''))
