@@ -29,8 +29,12 @@ def recompute_changed(original_file: str,
                       arch: str,
                       model_path: str,
                       fkwargs: dict):
+    # Move output file to extra data dir and rename the dir
     os.rename(original_file, os.path.join(original_dir, original_name))
     os.rename(original_dir, original_dir + '_changed')
+
+    os.makedirs(original_dir)
+    os.chdir(original_dir)
 
     atoms = read(source_file, format='vasp')
     atoms.set_constraint(FixSymmetry(atoms=atoms, adjust_positions=True, adjust_cell=cell))
@@ -43,7 +47,8 @@ def recompute_changed(original_file: str,
                         fmax=FMAX,
                         write_results=True,
                         filter_kwargs=fkwargs)
-    result = optimiser.run()
+    optimiser.run()
+    final_force = np.linalg.norm(optimiser.struct.get_forces(), axis=1).max()
 
     if optimiser.struct.info['initial_spacegroup'] == optimiser.struct.info['final_spacegroup']:
         title = 'spacegroup_conserved'
@@ -57,7 +62,9 @@ def recompute_changed(original_file: str,
         f.write(optimiser.struct.info['initial_spacegroup'] + '   ' + optimiser.struct.info['final_spacegroup'])
 
     np.save(os.path.join(original_dir, 'final.npy'),
-            np.array([optimiser.struct.get_potential_energy(), optimiser.dyn.fmax]))
+            np.array([optimiser.struct.get_potential_energy(), final_force]))
+
+    return final_force
 
 
 def check_cif2cell_vesta(save_dir: str, top_dir: str, arch: str, model_path: str):
@@ -158,6 +165,7 @@ if __name__ == '__main__':
 
     files = sorted(glob.glob(os.path.join(SOURCE_DIR, '*.vasp')))
 
+    not_converged = []
     for file in files:
         name = os.path.split(file)[-1]
         print(name)
@@ -170,8 +178,11 @@ if __name__ == '__main__':
 
             if os.path.exists(os.path.join(out_dir, 'spacegroup_changed')):
                 print('Recomputing data because space group in the original was changed')
-                recompute_changed(out_path, out_dir, name, file, args.cell, args.arch, args.model_path, filter_kwargs)
-
+                final_force = recompute_changed(out_path, out_dir, name, file, args.cell, args.arch, args.model_path,
+                                                filter_kwargs)
+                if final_force > FMAX:
+                    print('WARNING: Constrained optimisation did not converge')
+                    not_converged.append(name)
             continue
         elif os.path.exists(out_dir):
             if os.path.exists(os.path.join(target_dir, 'high_energy_structures', name)):
@@ -213,8 +224,14 @@ if __name__ == '__main__':
         with open(os.path.join(out_dir, title), 'w') as f:
             f.write(optimiser.struct.info['initial_spacegroup'] + '   ' + optimiser.struct.info['final_spacegroup'])
 
-        np.save(os.path.join(out_path, 'final.npy'), np.array([energy / len(atoms), optimiser.dyn.fmax]))
+        final_force = np.linalg.norm(optimiser.struct.get_forces(), axis=1).max()
+        np.save(os.path.join(out_path, 'final.npy'), np.array([energy / len(atoms), final_force]))
+
+        if final_force > FMAX:
+            print('WARNING: Optimisation not converged')
+            not_converged.append(name)
 
         os.chdir(DATA_DIR)
 
+    print(f'Following systems did not converge: {not_converged}')
     print('FINISHED')
