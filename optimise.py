@@ -56,7 +56,7 @@ def recompute_changed(original_file: str,
         print('Space group changed despite ASE constraint')
         title = 'spacegroup_changed'
 
-    write(original_dir, optimiser.struct, format='vasp')
+    write(original_file, optimiser.struct, format='vasp')
 
     with open(os.path.join(original_dir, title), 'w') as f:
         f.write(optimiser.struct.info['initial_spacegroup'] + '   ' + optimiser.struct.info['final_spacegroup'])
