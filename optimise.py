@@ -225,7 +225,7 @@ if __name__ == '__main__':
             f.write(optimiser.struct.info['initial_spacegroup'] + '   ' + optimiser.struct.info['final_spacegroup'])
 
         final_force = np.linalg.norm(optimiser.struct.get_forces(), axis=1).max()
-        np.save(os.path.join(out_path, 'final.npy'), np.array([energy / len(atoms), final_force]))
+        np.save(os.path.join(out_dir, 'final.npy'), np.array([energy / len(atoms), final_force]))
 
         if final_force > FMAX:
             print('WARNING: Optimisation not converged')
