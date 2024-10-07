@@ -19,6 +19,7 @@ SOURCE_DIR = os.path.join(DATA_DIR, 'primitive')
 TARGET_DIR = os.path.join(DATA_DIR, 'optimised')
 
 FMAX = 1e-6
+MAX_STEPS = 2000
 
 
 def recompute_changed(original_file: str,
@@ -45,6 +46,7 @@ def recompute_changed(original_file: str,
                         calc_kwargs={'dispersion': True},
                         attach_logger=True,
                         fmax=FMAX,
+                        steps=MAX_STEPS,
                         write_results=True,
                         filter_kwargs=fkwargs)
     optimiser.run()
@@ -129,6 +131,7 @@ def run_geometry_optimisation(atoms: ase.Atoms, arch: str, model_path: str, filt
                         calc_kwargs={'dispersion': True},
                         attach_logger=True,
                         fmax=FMAX,
+                        steps=MAX_STEPS,
                         write_results=True,
                         filter_kwargs=filter_kwargs)
     optimiser.run()
