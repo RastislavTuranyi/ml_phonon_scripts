@@ -146,6 +146,14 @@ def run_geometry_optimisation(atoms: ase.Atoms, arch: str, model_path: str, filt
     return optimiser
 
 
+def set_subdir(parent_dir: str, name: str) -> str:
+    sub_dir = os.path.join(parent_dir, name)
+    if not os.path.exists(sub_dir):
+        os.makedirs(sub_dir)
+
+    return sub_dir
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cell', action='store_true', help='If provided, the cell parameters are optimised')
@@ -171,9 +179,9 @@ if __name__ == '__main__':
         rmtree(target_dir)
         os.makedirs(target_dir)
     
-    extra_dir = os.path.join(target_dir, 'extra_data')
-    if not os.path.exists(extra_dir):
-        os.makedirs(extra_dir)
+    extra_dir = set_subdir(target_dir, 'extra_data')
+    not_converged_dir = set_subdir(target_dir, 'not_converged')
+    sg_changed_dir = set_subdir(target_dir, 'spacegroup_changed')
 
     files = sorted(glob.glob(os.path.join(SOURCE_DIR, '*.vasp')))
 
@@ -197,9 +205,13 @@ if __name__ == '__main__':
                 if final_force > FMAX:
                     print('WARNING: Constrained optimisation did not converge')
                     not_converged.append(name)
-                elif sg_same:
-                    # Remove trajectory if everything ok
-                    os.remove(traj_kwargs['filename'])
+                    os.rename(out_path, os.path.join(not_converged_dir, name))
+                else:
+                    if sg_same:
+                        # Remove trajectory if everything ok
+                        os.remove(traj_kwargs['filename'])
+                    else:
+                        os.rename(out_path, os.path.join(sg_changed_dir, name))
             continue
         elif os.path.exists(out_dir):
             if os.path.exists(os.path.join(target_dir, 'high_energy_structures', name)):
@@ -250,9 +262,13 @@ if __name__ == '__main__':
         if final_force > FMAX:
             print('WARNING: Optimisation not converged')
             not_converged.append(name)
-        elif sg_same:
-            # Remove trajectory if everything ok
-            os.remove(traj_kwargs['filename'])
+            os.rename(out_path, os.path.join(not_converged_dir, name))
+        else:
+            if sg_same:
+                # Remove trajectory if everything ok
+                os.remove(traj_kwargs['filename'])
+            else:
+                os.rename(out_path, os.path.join(sg_changed_dir, name))
 
         os.chdir(DATA_DIR)
 
