@@ -29,7 +29,8 @@ def recompute_changed(original_file: str,
                       cell: bool,
                       arch: str,
                       model_path: str,
-                      fkwargs: dict):
+                      fkwargs: dict,
+                      tkwargs: dict):
     # Move output file to extra data dir and rename the dir
     os.rename(original_file, os.path.join(original_dir, original_name))
     os.rename(original_dir, original_dir + '_changed')
@@ -48,11 +49,13 @@ def recompute_changed(original_file: str,
                         fmax=FMAX,
                         steps=MAX_STEPS,
                         write_results=True,
-                        filter_kwargs=fkwargs)
+                        filter_kwargs=fkwargs,
+                        traj_kwargs=tkwargs)
     optimiser.run()
     final_force = np.linalg.norm(optimiser.struct.get_forces(), axis=1).max()
 
-    if optimiser.struct.info['initial_spacegroup'] == optimiser.struct.info['final_spacegroup']:
+    same = optimiser.struct.info['initial_spacegroup'] == optimiser.struct.info['final_spacegroup']
+    if same:
         title = 'spacegroup_conserved'
     else:
         print('Space group changed despite ASE constraint')
@@ -66,7 +69,7 @@ def recompute_changed(original_file: str,
     np.save(os.path.join(original_dir, 'final.npy'),
             np.array([optimiser.struct.get_potential_energy(), final_force]))
 
-    return final_force
+    return final_force, same
 
 
 def check_cif2cell_vesta(save_dir: str, top_dir: str, arch: str, model_path: str):
@@ -123,7 +126,7 @@ def compute_one_energy(file_path: str, arch: str, model_path: str) -> float:
     return result['energy'] / len(atoms)
 
 
-def run_geometry_optimisation(atoms: ase.Atoms, arch: str, model_path: str, filter_kwargs: dict):
+def run_geometry_optimisation(atoms: ase.Atoms, arch: str, model_path: str, filter_kwargs: dict, tkwargs: dict):
     optimiser = GeomOpt(struct=atoms,
                         arch=arch,
                         device='cuda',
@@ -133,7 +136,8 @@ def run_geometry_optimisation(atoms: ase.Atoms, arch: str, model_path: str, filt
                         fmax=FMAX,
                         steps=MAX_STEPS,
                         write_results=True,
-                        filter_kwargs=filter_kwargs)
+                        filter_kwargs=filter_kwargs,
+                        traj_kwargs=tkwargs)
     optimiser.run()
     return optimiser
 
@@ -175,17 +179,21 @@ if __name__ == '__main__':
 
         out_path = os.path.join(target_dir, name)
         out_dir = os.path.join(extra_dir, name.replace('.vasp', ''))
+        traj_kwargs = {'filename': os.path.join(out_dir, 'optimisation.traj')}
 
         if os.path.exists(out_path):
             print(f'Skipping {name} because it is already complete')
 
             if os.path.exists(os.path.join(out_dir, 'spacegroup_changed')):
                 print('Recomputing data because space group in the original was changed')
-                final_force = recompute_changed(out_path, out_dir, name, file, args.cell, args.arch, args.model_path,
-                                                filter_kwargs)
+                final_force, sg_same = recompute_changed(out_path, out_dir, name, file, args.cell, args.arch,
+                                                            args.model_path, filter_kwargs, traj_kwargs)
                 if final_force > FMAX:
                     print('WARNING: Constrained optimisation did not converge')
                     not_converged.append(name)
+                elif sg_same:
+                    # Remove trajectory if everything ok
+                    os.remove(traj_kwargs['filename'])
             continue
         elif os.path.exists(out_dir):
             if os.path.exists(os.path.join(target_dir, 'high_energy_structures', name)):
@@ -200,21 +208,23 @@ if __name__ == '__main__':
         os.chdir(out_dir)
 
         atoms = read(file, format='vasp')
-        optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_kwargs)
+        optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_kwargs, traj_kwargs)
         energy = optimiser.struct.get_potential_energy()
 
-        if optimiser.struct.info['initial_spacegroup'] != optimiser.struct.info['final_spacegroup']:
+        sg_same = optimiser.struct.info['initial_spacegroup'] != optimiser.struct.info['final_spacegroup']
+        if sg_same:
             print('Space group changed during optimisation -> retrying with fixed symmetry')
 
             atoms = read(file, format='vasp')
             atoms.set_constraint(FixSymmetry(atoms=atoms, adjust_positions=True, adjust_cell=args.cell))
-            optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_kwargs)
+            optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_kwargs, traj_kwargs)
 
             energy2 = optimiser.struct.get_potential_energy()
             print(f'Original energy: {energy}; new energy: {energy2}')
             energy = energy2
 
-            if optimiser.struct.info['initial_spacegroup'] == optimiser.struct.info['final_spacegroup']:
+            sg_same = optimiser.struct.info['initial_spacegroup'] == optimiser.struct.info['final_spacegroup']
+            if sg_same:
                 title = 'spacegroup_conserved'
             else:
                 print('Space group changed despite ASE constraint')
@@ -234,6 +244,9 @@ if __name__ == '__main__':
         if final_force > FMAX:
             print('WARNING: Optimisation not converged')
             not_converged.append(name)
+        elif sg_same:
+            # Remove trajectory if everything ok
+            os.remove(traj_kwargs['filename'])
 
         os.chdir(DATA_DIR)
 
