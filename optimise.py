@@ -165,7 +165,7 @@ if __name__ == '__main__':
 
     files = sorted(glob.glob(os.path.join(SOURCE_DIR, '*.vasp')))
 
-    not_converged = []
+    not_converged, changed_despite_constraint = [], []
     for file in files:
         name = os.path.split(file)[-1]
         print(name)
@@ -216,6 +216,7 @@ if __name__ == '__main__':
             else:
                 print('Space group changed despite ASE constraint')
                 title = 'spacegroup_changed'
+                changed_despite_constraint.append(name)
         else:
             title = 'spacegroup_conserved'
 
@@ -234,4 +235,5 @@ if __name__ == '__main__':
         os.chdir(DATA_DIR)
 
     print(f'Following systems did not converge: {not_converged}')
+    print(f'Following systems changed despite using ase constraint: {changed_despite_constraint}')
     print('FINISHED')

@@ -75,7 +75,7 @@ if __name__ == '__main__':
 
             os.remove(os.path.join(out_path, 'temp.vasp'))
 
-        if not args.diable_vesta:
+        if not args.disable_vesta:
             name2 = name.replace('.cif', '_vesta.vasp')
             out_vesta = os.path.join(out_path, name2)
             subprocess.run([args.vesta, '-nogui',
