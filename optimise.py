@@ -20,6 +20,7 @@ TARGET_DIR = os.path.join(DATA_DIR, 'optimised')
 
 FMAX = 1e-6
 MAX_STEPS = 2000
+DEFAULT_FILTER_FUNC = 'FrechetCellFilter'
 
 
 def recompute_changed(original_file: str,
@@ -29,6 +30,7 @@ def recompute_changed(original_file: str,
                       cell: bool,
                       arch: str,
                       model_path: str,
+                      filter_func,
                       fkwargs: dict,
                       okwargs: dict,
                       tkwargs: dict):
@@ -50,6 +52,7 @@ def recompute_changed(original_file: str,
                         fmax=FMAX,
                         steps=MAX_STEPS,
                         write_results=True,
+                        filter_func=filter_func,
                         filter_kwargs=fkwargs,
                         opt_kwargs=okwargs,
                         traj_kwargs=tkwargs)
@@ -128,7 +131,12 @@ def compute_one_energy(file_path: str, arch: str, model_path: str) -> float:
     return result['energy'] / len(atoms)
 
 
-def run_geometry_optimisation(atoms: ase.Atoms, arch: str, model_path: str, filter_kwargs: dict, okwargs: dict,
+def run_geometry_optimisation(atoms: ase.Atoms,
+                              arch: str,
+                              model_path: str,
+                              filter_func,
+                              filter_kwargs: dict,
+                              okwargs: dict,
                               tkwargs: dict):
     optimiser = GeomOpt(struct=atoms,
                         arch=arch,
@@ -139,6 +147,7 @@ def run_geometry_optimisation(atoms: ase.Atoms, arch: str, model_path: str, filt
                         fmax=FMAX,
                         steps=MAX_STEPS,
                         write_results=True,
+                        filter_func=filter_func,
                         filter_kwargs=filter_kwargs,
                         opt_kwargs=okwargs,
                         traj_kwargs=tkwargs)
@@ -164,8 +173,8 @@ if __name__ == '__main__':
                         help='The "--model-path" parameter for Janus.')
     args = parser.parse_args()
 
-    filter_kwargs = {'hydrostatic_strain': args.cell, 'scalar_pressure': 0.}
-#    opt_kwargs = {'trajectory': True}
+    filter_func = DEFAULT_FILTER_FUNC if args.cell else None
+    filter_kwargs = {'hydrostatic_strain': args.cell}
 
     if os.path.exists(args.model_path):
         p = os.path.split(args.model_path)[-1]
@@ -201,7 +210,7 @@ if __name__ == '__main__':
             if os.path.exists(os.path.join(out_dir, 'spacegroup_changed')):
                 print('Recomputing data because space group in the original was changed')
                 final_force, sg_same = recompute_changed(out_path, out_dir, name, file, args.cell, args.arch,
-                                                            args.model_path, filter_kwargs, opt_kwargs, traj_kwargs)
+                                                         args.model_path, filter_func, filter_kwargs, opt_kwargs, traj_kwargs)
                 if final_force > FMAX:
                     print('WARNING: Constrained optimisation did not converge')
                     not_converged.append(name)
@@ -226,7 +235,8 @@ if __name__ == '__main__':
         os.chdir(out_dir)
 
         atoms = read(file, format='vasp')
-        optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_kwargs, opt_kwargs, traj_kwargs)
+        optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_func, filter_kwargs,
+                                              opt_kwargs, traj_kwargs)
         energy = optimiser.struct.get_potential_energy()
 
         sg_same = optimiser.struct.info['initial_spacegroup'] != optimiser.struct.info['final_spacegroup']
@@ -235,7 +245,8 @@ if __name__ == '__main__':
 
             atoms = read(file, format='vasp')
             atoms.set_constraint(FixSymmetry(atoms=atoms, adjust_positions=True, adjust_cell=args.cell))
-            optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_kwargs, opt_kwargs, traj_kwargs)
+            optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_func, filter_kwargs,
+                                                  opt_kwargs, traj_kwargs)
 
             energy2 = optimiser.struct.get_potential_energy()
             print(f'Original energy: {energy}; new energy: {energy2}')
