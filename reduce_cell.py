@@ -1,5 +1,6 @@
 import argparse
 import glob
+from io import TextIOWrapper
 import os
 from shutil import rmtree, copyfile
 import subprocess
@@ -11,6 +12,24 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 VASP_DIR = os.path.join(DATA_DIR, 'vasp')
 OUT_DIR = os.path.join(DATA_DIR, 'primitive')
 EXTRA_DIR = os.path.join(OUT_DIR, 'extra_data')
+
+
+class CustomFile(TextIOWrapper):
+    def readline(self, size=-1):
+        line = super().readline(size)
+        split = line.split()
+        lens = [len(val) < 3 for val in split]
+        
+        if all(lens) and 'D' in split:
+            line = line.replace('D', 'H')
+        return line
+
+
+def read_vasp_d(filename: str):
+    with open(filename, 'rb') as f:
+        f = CustomFile(f)
+        atoms = read(f, format='vasp')
+    return atoms
 
 
 if __name__ == '__main__':
@@ -38,15 +57,18 @@ if __name__ == '__main__':
 
     for cif2cell_file, vesta_file in zip(cif2cell_files, vesta_files):
         print('\n')
-        cif2cell = read(cif2cell_file, format='vasp')
-        vesta = read(vesta_file, format='vasp')
+        try:
+            cif2cell = read(cif2cell_file, format='vasp')
+            vesta = read(vesta_file, format='vasp')
+        except KeyError:
+            cif2cell = read_vasp_d(cif2cell_file)
+            vesta = read_vasp_d(vesta_file)
 
         if cif2cell == vesta:
             print('Files identical; skipping VESTA')
             files = [cif2cell_file]
         else:
             files = [cif2cell_file, vesta_file]
-
         space_group_number = []
         for i, file in enumerate(files):
             name = os.path.split(file)[-1]
