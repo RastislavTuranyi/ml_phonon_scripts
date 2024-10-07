@@ -171,6 +171,9 @@ if __name__ == '__main__':
                         help='The "--arch" parameter for Janus.')
     parser.add_argument('-mp', '--model-path', type=str, default='large',
                         help='The "--model-path" parameter for Janus.')
+    parser.add_argument('-sf', '--skip-failed', action='store_true',
+                        help='Causes previously known failed calculations (due to either symmetry having changed or '
+                             'because it did not converge) to be skipped instead of recomputing.')
     args = parser.parse_args()
 
     filter_func = DEFAULT_FILTER_FUNC if args.cell else None
@@ -226,8 +229,16 @@ if __name__ == '__main__':
             if os.path.exists(os.path.join(target_dir, 'high_energy_structures', name)):
                 print('Skipping because the structure is already complete and has been placed to high_energy_structures')
                 continue
+            elif (os.path.exists(os.path.join(not_converged_dir, name)) or
+                  os.path.exists(os.path.join(sg_changed_dir, name))):
+                if args.skip_failed:
+                    print('Skipping because optimisation failed and skipping was requested')
+                    continue
+                else:
+                    print('Optimisation failed previously; redoing from start')
+            else:
+                print('Previously, optimisiation was started but not finished; starting over')
 
-            print('Previously, optimisiation was started but not finished; starting over')
             rmtree(out_dir)
 
         os.makedirs(out_dir)
