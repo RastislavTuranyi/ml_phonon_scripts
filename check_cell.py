@@ -14,7 +14,6 @@ START_DIR = os.path.join(DATA_DIR, 'primitive')
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cell', action='store_true', help='If provided, the cell parameters are optimised')
-    parser.add_argument('-r', '--restart', action='store_true', help='Recomputes completed calculations')
     parser.add_argument('-a', '--arch', type=str, default='mace_mp',
                         help='The "--arch" parameter for Janus.')
     parser.add_argument('-mp', '--model-path', type=str, default='large',
@@ -30,9 +29,9 @@ if __name__ == '__main__':
     result_dir = os.path.join(result_dir, 'cell') if args.cell else os.path.join(result_dir, 'no_cell')
     extra_dir = os.path.join(result_dir, 'extra_data')
 
-    files = sorted(glob.glob(os.path.join(OPTIMISED_DIR, '*.vasp')))
+    files = sorted(glob.glob(os.path.join(result_dir, '*.vasp')))
     for file in files:
-        print('\n')
+        print()
         name = os.path.split(file)[-1]
         print(name)
 
