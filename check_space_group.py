@@ -70,6 +70,9 @@ if __name__ == '__main__':
                         help='The "--arch" parameter for Janus.')
     parser.add_argument('-mp', '--model-path', type=str, default='large',
                         help='The "--model-path" parameter for Janus.')
+    parser.add_argument('-cc', '--check-changed', action='store_true',
+                        help='Also check systems that have been put aside by optimise.py because it found that the '
+                             'space group changed and therefore re-did the calculation using constraints.')
     args = parser.parse_args()
 
     if os.path.exists(args.model_path):
@@ -94,6 +97,9 @@ if __name__ == '__main__':
     results = []
     previous_file = 'NONE'
     for file in files:
+        if not args.check_changed and '_changed' in os.path.split(os.path.dirname(file))[-1]:
+            continue
+
         before, after = None, None
         with open(file, 'r') as f:
             for line in f:
