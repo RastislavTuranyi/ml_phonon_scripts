@@ -66,6 +66,10 @@ if __name__ == '__main__':
             except FileNotFoundError:
                 continue
 
+            elements = elements.split()
+            has_d = 'D' in elements
+            elements = ' '.join(['H' if e == 'D' else e for e in elements])
+
             out_cif2cell = os.path.join(out_path, name.replace('.cif', '.vasp'))
             with open(out_cif2cell, 'w') as f:
                 f.write(comment)
@@ -83,3 +87,28 @@ if __name__ == '__main__':
                             '-merge_split_site',
                             '-save', 'format=VASP', 'option=cartesian', out_vesta,
                             ])
+
+            try:
+                has_d
+            except NameError:
+                with open(out_vesta, 'r') as f:
+                    for _ in range(5):
+                        f.readline()
+                    elements = f.readline().strip().split()
+                    has_d = 'D' in elements
+
+            if has_d:
+                temp = os.path.join(out_path, 'temp.vasp')
+                with open(out_vesta, 'r') as og, open(temp, 'w') as new:
+                    for _ in range(5):
+                        new.write(og.readline())
+
+                    elements = og.readline().strip().replace('\n', '').split()
+                    elements = ' '.join(['H' if e == 'D' else e for e in elements])
+                    new.write(elements + '\n')
+
+                    for line in og:
+                        new.write(line)
+
+                os.remove(out_vesta)
+                os.rename(temp, out_vesta)
