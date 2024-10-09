@@ -36,7 +36,11 @@ def recompute_changed(original_file: str,
                       tkwargs: dict):
     # Move output file to extra data dir and rename the dir
     os.rename(original_file, os.path.join(original_dir, original_name))
-    os.rename(original_dir, original_dir + '_changed')
+    try:
+        os.rename(original_dir, original_dir + '_changed')
+    except FileExistsError:
+        rmtree(original_dir + '_changed')
+        os.rename(original_dir, original_dir + '_changed')
 
     os.makedirs(original_dir)
     os.chdir(original_dir)
