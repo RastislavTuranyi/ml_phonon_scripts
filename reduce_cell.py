@@ -1,3 +1,6 @@
+"""
+Script for reducing the unit cell of a system into the primitive unit cell.
+"""
 import argparse
 import glob
 from io import TextIOWrapper
@@ -33,7 +36,12 @@ def read_vasp_d(filename: str):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='Script for reducing the unit cell of a system into its primitive '
+                                                 'cell using phonopy. Assumes its input is the output of the '
+                                                 '`convert_to_xyz.py` script with both cif2cell and VESTA having been '
+                                                 'run. This is because it uses both sets of files to determine whether '
+                                                 'the conversion resulted in the same space group; if it did, only one '
+                                                 'of the files is kept, but if it didn\'t, both are.')
     parser.add_argument('-r', '--restart', action='store_true', help='Recomputes completed calculations')
     args = parser.parse_args()
 
