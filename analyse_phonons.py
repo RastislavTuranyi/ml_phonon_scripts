@@ -1,7 +1,6 @@
 import argparse
 import glob
 import os
-import subprocess
 
 import numpy as np
 
@@ -10,6 +9,8 @@ from euphonic.util import mp_grid
 
 HOME_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(HOME_DIR, 'results')
+
+GRID = mp_grid((5, 5, 5))
 
 
 if __name__ == '__main__':
@@ -46,17 +47,24 @@ if __name__ == '__main__':
         except FileExistsError:
             pass
 
-        force_constants = ForceConstants.from_phonopy(
-            path=dir,
-            summary_name=f'{compound}-phonopy.yaml',
-            fc_name=f'{compound}-force_constants.hdf5'
-        )
+        out = os.path.join(dir, f'{compound}_frequencies.npy')
+        out_correction = os.path.join(dir, f'{compound}_frequencies_corrected.npy')
 
-        phonons = force_constants.calculate_qpoint_phonon_modes(mp_grid((5, 5, 5))).frequencies.magnitude
-        phonons_correction = force_constants.calculate_qpoint_phonon_modes(mp_grid((5, 5, 5)), asr='reciprocal').frequencies.magnitude
+        if os.path.exists(out) and os.path.exists(out_correction):
+            phonons = np.load(out)
+            phonons_correction = np.load(out_correction)
+        else:
+            force_constants = ForceConstants.from_phonopy(
+                path=dir,
+                summary_name=f'{compound}-phonopy.yaml',
+                fc_name=f'{compound}-force_constants.hdf5'
+            )
 
-        np.save(os.path.join(dir, f'{compound}_frequencies.npy'), phonons)
-        np.save(os.path.join(dir, f'{compound}_frequencies_corrected.npy'), phonons_correction)
+            phonons = force_constants.calculate_qpoint_phonon_modes(GRID).frequencies.magnitude
+            phonons_correction = force_constants.calculate_qpoint_phonon_modes(GRID, asr='reciprocal').frequencies.magnitude
+
+            np.save(out, phonons)
+            np.save(out_correction, phonons_correction)
 
         imaginary = np.sum(phonons < 0, axis=0) > 0
         imaginary_correction = np.sum(phonons_correction < 0, axis=0) > 0
@@ -68,13 +76,33 @@ if __name__ == '__main__':
             print(f'FAILED: {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
             print(f'og: {np.min(phonons, axis=0)[imaginary]}')
             print(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}')
+
+            with open(os.path.join(dir, 'FAILED'), 'w') as f:
+                f.write(f'og: {np.min(phonons, axis=0)[imaginary]}\n')
+                f.write(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}\n')
         elif ica:
             print(f'WEIRD: {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
             print(f'og: {np.min(phonons, axis=0)[imaginary]}')
             print(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}')
+
+            with open(os.path.join(dir, 'WEIRD'), 'w') as f:
+                f.write(f'og: {np.min(phonons, axis=0)[imaginary]}\n')
+                f.write(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}\n')
+
+                indices = np.where(imaginary_correction)
+                for idx in indices:
+                    f.write(f'{GRID[phonons_correction[:, idx] < 0]}\n')
         elif ia:
             print(f'OK: {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
             print(f'og: {np.min(phonons, axis=0)[imaginary]}')
             print(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}')
+
+            with open(os.path.join(dir, 'OK'), 'w') as f:
+                f.write(f'og: {np.min(phonons, axis=0)[imaginary]}\n')
+                f.write(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}\n')
         else:
             print(f'GREAT!!! {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
+            with open(os.path.join(dir, 'GREAT', 'w')) as f:
+                pass
+
+        print()
