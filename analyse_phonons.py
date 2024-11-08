@@ -41,7 +41,10 @@ if __name__ == '__main__':
         print(compound)
 
         phonopy_file = os.path.join(dir, f'{compound}-phonopy')
-        os.symlink(phonopy_file + '.yml', phonopy_file + '.yaml')
+        try:
+            os.symlink(phonopy_file + '.yml', phonopy_file + '.yaml')
+        except FileExistsError:
+            pass
 
         force_constants = ForceConstants.from_phonopy(
             path=dir,
@@ -63,15 +66,15 @@ if __name__ == '__main__':
 
         if ia and ica:
             print(f'FAILED: {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
-            print(f'og: {np.max(phonons, axis=0)[imaginary]}')
-            print(f'with correction: {np.max(phonons_correction, axis=0)[imaginary_correction]}')
+            print(f'og: {np.min(phonons, axis=0)[imaginary]}')
+            print(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}')
         elif ica:
             print(f'WEIRD: {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
-            print(f'og: {np.max(phonons, axis=0)[imaginary]}')
-            print(f'with correction: {np.max(phonons_correction, axis=0)[imaginary_correction]}')
+            print(f'og: {np.min(phonons, axis=0)[imaginary]}')
+            print(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}')
         elif ia:
             print(f'OK: {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
-            print(f'og: {np.max(phonons, axis=0)[imaginary]}')
-            print(f'with correction: {np.max(phonons_correction, axis=0)[imaginary_correction]}')
+            print(f'og: {np.min(phonons, axis=0)[imaginary]}')
+            print(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}')
         else:
             print(f'GREAT!!! {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
