@@ -14,6 +14,28 @@ GRID = mp_grid((5, 5, 5))
 IMAGINARY_MODE_TOLERANCE = 1e-3
 
 
+def print_result(p, img, imgc, result):
+    print(f'{result}: {np.sum(img)} imaginary modes, {np.sum(imgc)} with correction')
+    print(f'og: {np.min(p, axis=0)[img]}')
+    print(f'with correction: {np.min(phonons_correction, axis=0)[imgc]}')
+
+
+def write_default(name, path, p, img, pc, imgc):
+    with open(os.path.join(path, name), 'w') as f:
+        f.write(f'og: {np.min(p, axis=0)[img]}\n')
+        f.write(f'with correction: {np.min(pc, axis=0)[imgc]}\n')
+
+
+def write_weird(name, path, p, img, pc, imgc):
+    with open(os.path.join(path, name), 'w') as f:
+        f.write(f'og: {np.min(p, axis=0)[img]}\n')
+        f.write(f'with correction: {np.min(pc, axis=0)[imgc]}\n')
+
+        indices = np.where(imgc)[0]
+        for idx in indices:
+            f.write(f'{GRID[pc[:, idx] < 0]}\n')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cell', action='store_true',
@@ -77,41 +99,21 @@ if __name__ == '__main__':
 
         if ia and ica:
             if np.all(np.abs(phonons_correction[phonons_correction < 0]) < args.tolerance):
-                print(f'ACCEPTABLE: {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
-                print(f'og: {np.min(phonons, axis=0)[imaginary]}')
-                print(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}')
-
-                with open(os.path.join(dir, 'ACCEPTABLE'), 'w') as f:
-                    f.write(f'og: {np.min(phonons, axis=0)[imaginary]}\n')
-                    f.write(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}\n')
+                print_result(phonons, imaginary, imaginary_correction, 'ACCEPTABLE')
+                write_default('ACCEPTABLE', dir, phonons, imaginary, phonons_correction, imaginary_correction)
             else:
-                print(f'FAILED: {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
-                print(f'og: {np.min(phonons, axis=0)[imaginary]}')
-                print(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}')
-
-                with open(os.path.join(dir, 'FAILED'), 'w') as f:
-                    f.write(f'og: {np.min(phonons, axis=0)[imaginary]}\n')
-                    f.write(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}\n')
+                print_result(phonons, imaginary, imaginary_correction, 'FAILED')
+                write_default('FAILED', dir, phonons, imaginary, phonons_correction, imaginary_correction)
         elif ica:
-            print(f'WEIRD: {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
-            print(f'og: {np.min(phonons, axis=0)[imaginary]}')
-            print(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}')
-
-            with open(os.path.join(dir, 'WEIRD'), 'w') as f:
-                f.write(f'og: {np.min(phonons, axis=0)[imaginary]}\n')
-                f.write(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}\n')
-
-                indices = np.where(imaginary_correction)[0]
-                for idx in indices:
-                    f.write(f'{GRID[phonons_correction[:, idx] < 0]}\n')
+            if np.all(np.abs(phonons_correction[phonons_correction < 0]) < args.tolerance):
+                print_result(phonons, imaginary, imaginary_correction, 'WEIRD-OK')
+                write_weird('WEIRD-OK', dir, phonons, imaginary, phonons_correction, imaginary_correction)
+            else:
+                print_result(phonons, imaginary, imaginary_correction, 'WEIRD-FAIL')
+                write_weird('WEIRD-FAIL', dir, phonons, imaginary, phonons_correction, imaginary_correction)
         elif ia:
-            print(f'OK: {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
-            print(f'og: {np.min(phonons, axis=0)[imaginary]}')
-            print(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}')
-
-            with open(os.path.join(dir, 'OK'), 'w') as f:
-                f.write(f'og: {np.min(phonons, axis=0)[imaginary]}\n')
-                f.write(f'with correction: {np.min(phonons_correction, axis=0)[imaginary_correction]}\n')
+            print_result(phonons, imaginary, imaginary_correction, 'OK')
+            write_default('OK', dir, phonons, imaginary, phonons_correction, imaginary_correction)
         else:
             print(f'GREAT!!! {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
             with open(os.path.join(dir, 'GREAT', 'w')) as f:
