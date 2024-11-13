@@ -142,8 +142,9 @@ if __name__ == '__main__':
                        SumContributions=True)
 
         energy = result[0].extractX().flatten()
+        energy = (energy[1:] + energy[:-1]) / 2
         s = result[0].extractY().flatten()
-        print(np.shape(energy), np.shape(s))
+
         np.save(os.path.join(directory, 'abins.npy'),
                 np.stack([energy, s]))
 
@@ -155,7 +156,7 @@ if __name__ == '__main__':
         ax.plot(energy, s, label='AbINS')
 
         ax.set_xlabel('Energy transfer $(cm^{-1})$')
-        ax.set_ylabel('S (unknown units)')
+        ax.set_ylabel('S(q, w)')
 
         plt.legend()
 
