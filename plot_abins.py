@@ -2,24 +2,22 @@ import argparse
 import csv
 import glob
 import os
-from cgi import parse
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 from mantid.simpleapi import Abins
-from scipy.stats import pareto
 
 HOME_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(HOME_DIR, 'results')
-INS_DIR = os.path.join(HOME_DIR, 'data', 'isis')
+INS_DIR = os.path.join(HOME_DIR, 'data', 'ins')
 
 
 def parse_csv_data():
     result = {}
 
     with open(os.path.join(INS_DIR, 'data.csv'), 'r') as f:
-        reader = csv.reader(f, delimeter=',')
+        reader = csv.reader(f, delimiter=',')
         next(reader)
 
         for line in reader:
@@ -29,39 +27,59 @@ def parse_csv_data():
 
             if ',' in file_field:
                 for file in file_field.split(','):
-                    result[file.strip().replace('.cif', '')] = {
-                        line[2].lower(): line[1]
-                    }
+                    key = file.strip().replace('.cif', '')
+                    deuteration = line[2].lower()
+                    try:
+                        result[key]
+                    except KeyError:
+                        result[key] = {}
+
+                    result[key][deuteration] = line[1]
             else:
-                result[file_field.strip().replace('.cif', '')] = {
-                    line[2].lower(): line[1]
-                }
+                key = file_field.strip().replace('.cif', '')
+                deuteration = line[2].lower()
+                try:
+                    result[key]
+                except KeyError:
+                    result[key] = {}
+
+                result[key][deuteration] = line[1]
 
     return result
 
 
 def parse_data_file(path):
     out = []
+    delimiter = None
     with open(path, 'r') as f:
         for line in f:
             line = line.strip().split()
             if len(line) > 1:
-                for item in line:
-                    try:
-                        float(item)
-                    except TypeError:
-                        break
-                else:
+                if has_data_started(line):
+                    break
+            else:
+                line = line.strip().split(',')
+                if len(line) > 1 and has_data_started(line):
                     break
         else:
             raise Exception('parsing error')
 
-        out.append([float(val) for val in line])
+        out.append([float(val.strip()) for val in line])
 
         for line in f:
-            out.append([float(val) for val in line])
+            out.append([float(val.strip()) for val in line])
 
     return out
+
+
+def has_data_started(line):
+    for item in line:
+        try:
+            float(item.strip())
+        except TypeError:
+            return False
+
+    return True
 
 
 if __name__ == '__main__':
@@ -90,6 +108,7 @@ if __name__ == '__main__':
     directories = glob.glob(os.path.join(results_dir, '*', ''))
 
     for directory in directories:
+        print()
         compound = os.path.split(os.path.split(directory)[0])[-1]
 
         if not (
@@ -109,17 +128,22 @@ if __name__ == '__main__':
             print(f'skipping {compound} due to not having TOSCA measurements')
             continue
 
-        os.symlink(os.path.join(directory, f'{compound}-force_constants.hdf5'),
-                   os.path.join(directory, 'force_constants.hdf5'))
+        try:
+            os.symlink(os.path.join(directory, f'{compound}-force_constants.hdf5'),
+                       os.path.join(directory, 'force_constants.hdf5'))
+        except FileExistsError:
+            pass
+
+        print(compound)
 
         result = Abins(VibrationalOrPhononFile=os.path.join(directory, f'{compound}-phonopy.yaml'),
                        AbInitioProgram='FORCECONSTANTS',
                        Instrument='TOSCA',
                        SumContributions=True)
 
-        energy = result[0].extractX()
-        s = result[0].extractY()
-
+        energy = result[0].extractX().flatten()
+        s = result[0].extractY().flatten()
+        print(np.shape(energy), np.shape(s))
         np.save(os.path.join(directory, 'abins.npy'),
                 np.stack([energy, s]))
 
