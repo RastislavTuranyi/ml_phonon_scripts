@@ -53,33 +53,53 @@ def parse_data_file(path):
     delimiter = None
     with open(path, 'r') as f:
         for line in f:
-            line = line.strip().split()
-            if len(line) > 1:
-                if has_data_started(line):
+            values = line.strip().split()
+            if len(values) > 1:
+                if has_data_started(values):
                     break
             else:
-                line = line.strip().split(',')
-                if len(line) > 1 and has_data_started(line):
+                values = line.strip().split(',')
+                if len(values) > 1 and has_data_started(values):
+                    delimiter = ','
                     break
         else:
             raise Exception('parsing error')
 
-        out.append([float(val.strip()) for val in line])
+        out.append([float(val.strip()) for val in line.strip().split(delimiter)])
 
         for line in f:
-            out.append([float(val.strip()) for val in line])
+            try:
+                out.append([float(val.strip()) for val in line.split(delimiter)])
+            except ValueError:
+                print(line, delimiter, line.split(delimiter))
+                raise
 
-    return out
+    return split_parsed_data(out)
 
 
 def has_data_started(line):
     for item in line:
         try:
             float(item.strip())
-        except TypeError:
+        except ValueError:
             return False
 
     return True
+
+
+def split_parsed_data(data: list[list[float]]):
+    out = []
+
+    for i, line in enumerate(data):
+        if len(line) == 1 and int(line[0]) == 2:
+            break
+    else:
+        return data
+
+    for line in data[i+1:]:
+        out.append(line)
+
+    return out
 
 
 if __name__ == '__main__':
@@ -148,7 +168,13 @@ if __name__ == '__main__':
         np.save(os.path.join(directory, 'abins.npy'),
                 np.stack([energy, s]))
 
-        ins_data = np.array(parse_data_file(os.path.join(INS_DIR, f'{compound}.dat')))
+        ins_data = parse_data_file(os.path.join(INS_DIR, f'{compound}.dat'))
+        try:
+            ins_data = np.array(ins_data)
+        except ValueError:
+            for val in ins_data:
+                print(val)
+            raise
 
         fig, ax = plt.subplots(dpi=400)
 
@@ -162,3 +188,5 @@ if __name__ == '__main__':
 
         fig.savefig(os.path.join(directory, f'{compound}.png'))
         plt.close(fig)
+
+        result.delete()
