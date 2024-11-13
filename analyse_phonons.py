@@ -48,7 +48,6 @@ if __name__ == '__main__':
                         help='The tolerance for imaginary modes')
     args = parser.parse_args()
 
-
     if os.path.exists(args.model_path):
         p = os.path.split(args.model_path)[-1]
         results_dir = os.path.join(RESULTS_DIR, '_'.join([args.arch, p]))
