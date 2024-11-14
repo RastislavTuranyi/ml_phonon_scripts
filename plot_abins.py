@@ -87,6 +87,18 @@ def has_data_started(line):
     return True
 
 
+def normalise_data(abins_x, abins_y, experimental):
+    abins_start = np.where(abins_x > 50)[0][0]
+    exp_start = np.where(experimental[:, 0] > 50)[0][0]
+
+    abins_max = np.max(abins_y[abins_start:])
+    exp_max = np.max(experimental[exp_start:, 1])
+
+    experimental[:, 1] *= abins_max / exp_max
+
+    return abins_x, abins_y, experimental, max([abins_max, exp_max])
+
+
 def split_parsed_data(data: list[list[float]]):
     out = []
 
@@ -110,6 +122,8 @@ if __name__ == '__main__':
                         help='The "--arch" parameter for Janus.')
     parser.add_argument('-mp', '--model-path', type=str, default='large',
                         help='The "--model-path" parameter for Janus.')
+    parser.add_argument('-rp', '--replot', action='store_true',
+                        help='Disables skipping when the plot already exists.')
     args = parser.parse_args()
 
     data = parse_csv_data()
@@ -128,9 +142,13 @@ if __name__ == '__main__':
     directories = glob.glob(os.path.join(results_dir, '*', ''))
 
     for directory in directories:
-        print()
         compound = os.path.split(os.path.split(directory)[0])[-1]
 
+        if not args.replot and os.path.exists(os.path.join(directory, f'{compound}.png')):
+            print(f'Skipping {compound} because already complete')
+            continue
+        
+        print()
         if not (
             os.path.exists(os.path.join(directory, 'ACCEPTABLE')) or
             os.path.exists(os.path.join(directory, 'WEIRD-OK')) or
@@ -159,7 +177,10 @@ if __name__ == '__main__':
         result = Abins(VibrationalOrPhononFile=os.path.join(directory, f'{compound}-phonopy.yaml'),
                        AbInitioProgram='FORCECONSTANTS',
                        Instrument='TOSCA',
-                       SumContributions=True)
+                       SumContributions=True,
+                       QuantumOrderEventsNumber='2',
+                       Autoconvolution=True,
+                       Setting='All detectors (TOSCA)')
 
         energy = result[0].extractX().flatten()
         energy = (energy[1:] + energy[:-1]) / 2
@@ -176,13 +197,20 @@ if __name__ == '__main__':
                 print(val)
             raise
 
+        energy, s, ins_data, maximum = normalise_data(energy, s, ins_data)
+
         fig, ax = plt.subplots(dpi=400)
 
-        ax.plot(ins_data[:, 0], ins_data[:, 1], label='Experimental')
-        ax.plot(energy, s, label='AbINS')
+        ax.plot(ins_data[:, 0], ins_data[:, 1], label='Experimental', alpha=0.6)
+        ax.plot(energy, s, label='AbINS', alpha=0.6)
 
         ax.set_xlabel('Energy transfer $(cm^{-1})$')
         ax.set_ylabel('S(q, w)')
+
+        ax.set_xlim(0, 4000)
+        ax.set_ylim(top=maximum*1.5)
+
+        ax.axes.get_yaxis().set_ticks([])
 
         plt.legend()
 
@@ -190,3 +218,7 @@ if __name__ == '__main__':
         plt.close(fig)
 
         result.delete()
+
+    created_hdf_files = glob.glob(os.path.join(HOME_DIR, '*.hdf5'))
+    for file in created_hdf_files: 
+        os.remove(file)
