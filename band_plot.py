@@ -18,8 +18,24 @@ if __name__ == '__main__':
     phonons = euphonic.QpointPhononModes.from_phonopy(path, name)
     phonons.reorder_frequencies()
 
-    bands = phonons.get_dispersion().split(btol=5.)
+    bands = phonons.get_dispersion()
+    for band in bands:
+        band.y_data = band.y_data.to('reciprocal_centimeter')
 
-    fig = plot_1d(bands, ylabel='Energy (meV)', c='#E94D36', alpha=0.8)
+    bands = bands.split(btol=5.)
+
+    fig = plot_1d(bands, ylabel='Energy (meV)', color='#E94D36', alpha=0.8)
+
+    for ax in fig.axes:
+        for line in ax.get_lines():
+            line.set_color('#E94D36')
+
+    fig.axes[-1].set_ylabel('Energy ($cm^{-1}$)', fontsize=20)
+
+    fig.canvas.draw()
+    fig.canvas.flush_events()
+
+    if os.path.exists(args.output):
+        os.remove(args.output)
 
     fig.savefig(args.output)
