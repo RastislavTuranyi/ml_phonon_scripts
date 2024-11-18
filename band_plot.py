@@ -21,9 +21,10 @@ if __name__ == '__main__':
                              'file. If nothing is provided, the picture is saved to '
                              'input_path/{name}_bands.png')
     parser.add_argument('-u', '--units', choices=['energy', 'frequency', 'f', 'e'],
+                        default='f',
                         help='The units to use for plotting the y-axis. If "energy" or "e" is '
                              'specified, the y-axis will be in meV, and if "frequency" or "f" is '
-                             'specified, the y-axis will be in 1/cm.')
+                             'specified, the y-axis will be in 1/cm. Default is "f".')
     args = parser.parse_args()
 
     if args.units in ['energy', 'e']:

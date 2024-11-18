@@ -1,3 +1,23 @@
+"""
+Script for running phonon calculations using janus and an MLIP.
+
+Assumptions:
+
+1.  The `optimise.py` script has been run with the same parameters and the results are available as
+    expected.
+2.  A 2x2x2 supercell is used.
+
+This script computes phonons for all systems outputted by `optimise.py` where the symmetry remained
+conserved from before optimisation. It includes the functionality for determining whether the
+symmetry was conserved, but it can also work off of the `check_space_group.py` script, in which
+case its outputs are used instead so as not to repeat I/O.
+
+The janus phonon calculations are initiated using the janus CLI via `subprocess` and are run on a
+GPU. However, should the calculations fail due to cuda/PyTorch running out of memory, the run is
+retried with `PYTORCH_CUDA_ALLOC_CONF = 'expandable_segments:True'` environment variable in the
+hopes that that might help, and should there still not be enough memory, the computation will
+instead be run on the CPU, which will likely take significant resources.
+"""
 import argparse
 import glob
 import os
@@ -5,7 +25,6 @@ import subprocess
 from shutil import copyfile, rmtree
 
 from ase.io import read
-import numpy as np
 
 
 HOME_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -16,7 +35,18 @@ TARGET_DIR = os.path.join(HOME_DIR, 'results')
 SUPERCELL = '2x2x2'
 
 
+class InvalidLogFile(Exception):
+    pass
+
+
 def is_symmetry_broken(path: str) -> bool:
+    """
+    Checks whether optimisation changed the symmetry of the space group by looking at yaml log
+    file outputted by janus.
+
+    :param path: Path to a directory containing the output of the `optimise.py` script for one system
+    :return: Whether the symmetry changed during optimisation
+    """
     file = glob.glob(os.path.join(path, '*-log.yml'))[0]
     
     before, after = None, None
@@ -28,17 +58,32 @@ def is_symmetry_broken(path: str) -> bool:
             elif 'After optimization spacegroup:' in line:
                 after = line.split('After optimization spacegroup:')[-1].replace('"', '').strip()
                 break
-            else: 
-                raise Exception()
-    return before == after
+        else:
+            raise InvalidLogFile('The janus log file is invalid: maybe the optimisation changed'
+                                 ' or the spec changed in the latest janus version. Regardless,'
+                                 ' the space group information could not be read.')
+    return before != after
 
 
 def has_symmetry_changed(src_dir: str, name: str) -> bool:
+    """
+    Checks whether optimisation changed the symmetry of a particular system. First, the flag files
+    created by the `check_space_group.py` script are checked, and if they are not present, the
+    janus log file is used to determine the symmetry change (see :py:func:`is_symmetry_broken`).
+
+    :param src_dir: The path to the directory holding the results for all systems.
+    :param name: The name of the system - this is the same name as the folder corresponding to the
+                 system in `src_dir/extra_data`
+
+    :return: Whether the symmetry changed
+    """
     check_dir = os.path.join(src_dir, 'extra_data', name)
     if os.path.exists(os.path.join(check_dir, 'spacegroup_changed')):
         print(f'Skipping {name} because optimisation changed space group')
         return True
-    elif not os.path.exists(os.path.join(check_dir, 'spacegroup_conserved')):
+    elif os.path.exists(os.path.join(check_dir, 'spacegroup_conserved')):
+        return False
+    else:
         if is_symmetry_broken(check_dir):
             print(f'Skipping {name} because optimisation changed space group')
             return True
@@ -47,6 +92,16 @@ def has_symmetry_changed(src_dir: str, name: str) -> bool:
 
 
 def is_calculation_complete(work_dir: str, name: str) -> bool:
+    """
+    Checks whether the calculation completed successfully (as indicated by the presence of a
+    force constants file). If the calculation had been previously started and not finished, the
+    entire directory is also deleted as a side effect.
+
+    :param work_dir: The path to the directory containing the results for a given system
+    :param name: The name of the system
+
+    :return: Whether the calculation completed successfully
+    """
     if glob.glob(os.path.join(work_dir, '*force_constants*')):
         print(f'Skipping {name} because it is already complete')
         return True
@@ -61,6 +116,12 @@ def is_calculation_complete(work_dir: str, name: str) -> bool:
 
 
 def get_supercell(path: str) -> str:
+    """
+    Constructs a supercell to use for the phonon calculations with janus.
+
+    :param path: The path to the structure file to use.
+    :return: The supercell as a string for input to janus phonons CLI.
+    """
     atoms = read(path, format='vasp')
 
     cell_lengths = atoms.cell.cellpar()[:3]
