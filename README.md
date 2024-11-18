@@ -13,3 +13,5 @@ much more computer-friendly (and phonopy compatible) VASP POSCAR format.
 2. `reduce_cell.py` for using phonopy to reduce each system into its primitive cell
 3. `optimise.py` for optimising the structure using a given MLIP
 4. `run_phonon.py` for running the phonon calculations on the optimised structure
+5. `analyse_phonons.py` for checking whether phonon calculations concluded successfully
+6. `plot_abins.py` for computing INS spectra from the phonon calculations and plotting the comparison to experimental spectra
