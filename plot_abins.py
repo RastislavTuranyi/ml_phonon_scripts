@@ -1,3 +1,19 @@
+"""
+Script for the final stage of the workflow: computing the INS spectra from the computed phonons and
+plotting those against the experimental spectra.
+
+Assumptions:
+
+1. The `run_phonon.py` script has been successfully run, and the results are present as outputted
+   by that script
+2. The `analyse_phonons.py` script has been run to check on the outputs of the phonon calculations,
+   and the marker files are present in the output directories.
+3. The experimental data, downloaded from the ISIS INS database, is present in `./data/ins` and
+   named following a similar naming convention as the structure files have been.
+4. A CSV file `data.csv` is present in `./data/ins`, which contains the mapping between structure
+   file names and the instrument used in the neutron experiment. More details can be found in
+   :py:func:`parse_csv_data`.
+"""
 import argparse
 import csv
 import glob
@@ -13,7 +29,48 @@ RESULTS_DIR = os.path.join(HOME_DIR, 'results')
 INS_DIR = os.path.join(HOME_DIR, 'data', 'ins')
 
 
-def parse_csv_data():
+def parse_csv_data() -> dict[str, dict[str, str]]:
+    """
+    Parses a CSV file called `data.csv` in the INS_DIR which contains a mapping between structure
+    file name, and both the deuteration and the instrument that the experimental data was recorded
+    on.
+
+    This method was deemed to be the easiest way of encoding the mapping between file name and
+    instrument it was recorded on.
+
+    Example file:
+    ```
+    Name   Instrument   Deuteration   FileName
+    Acenapthene   TFXA   ''   acenapthene_48932
+    Acetinilide   TFXA   ''   acetinilide_170702
+    Acetinilide-D3   TFXA   D3   acetinilide_170702
+    Acetinilide-D5   TFXA   D5   acetinilide_170702
+    Acetinilide-D8   TFXA   D8   acetinilide_170702
+    "Acetic acid OH"   TOSCA   ''   acetic_acid_8722
+    "Acetic acid OD"   TOSCA   D   acetic_acid_8722
+    ```
+
+    Example output of this function:
+    ```
+    {
+        'acenapthene_48932: {
+            '': 'TFXA',
+        },
+        'acetinilide_170702': {
+            '': 'TFXA',
+            'D3': 'TFXA',
+            'D5': 'TFXA',
+            'D8: 'TFXA',
+        },
+        'acetic_acid_8722': {
+            '': 'TOSCA',
+            'D': 'TOSCA',
+        },
+    }
+    ```
+
+    :return: Dictionary with the mapping
+    """
     result = {}
 
     with open(os.path.join(INS_DIR, 'data.csv'), 'r') as f:
@@ -48,7 +105,15 @@ def parse_csv_data():
     return result
 
 
-def parse_data_file(path):
+def parse_data_file(path: str) -> list[list[float]]:
+    """
+    Parses a data (ASCII) file from the ISIS INS database
+    (http://wwwisis2.isis.rl.ac.uk/INSdatabase/Theindex.asp). The file is assumed to be an output
+    from Mantid.
+
+    :param path: Path to the file to parse
+    :return: The table of data from the file.
+    """
     out = []
     delimiter = None
     with open(path, 'r') as f:
@@ -77,7 +142,14 @@ def parse_data_file(path):
     return split_parsed_data(out)
 
 
-def has_data_started(line):
+def has_data_started(line: list[str]) -> bool:
+    """
+    Checks whether the data has started, as indicated by the fact that the line contains a row of
+    float data, at least two values long.
+
+    :param line: A split line of the data file
+    :return: Whether the data has started
+    """
     for item in line:
         try:
             float(item.strip())
@@ -87,10 +159,22 @@ def has_data_started(line):
     return True
 
 
-def normalise_data(abins_x, abins_y, experimental):
-    #abins_y -= abins_y[-1]
-    #experimental[:, 1] -= experimental[-1, 1]
-    
+def normalise_data(abins_x: np.ndarray,
+                   abins_y: np.ndarray,
+                   experimental: np.ndarray
+                   ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    """
+    Normalises the experimental data w.r.t. the computed data in order to make them appear to have
+    similar scales on a plot. This is done by setting the highest peak above 50 $cm^{-1}$ in both
+    datasets to be equal. The restriction is used because experimental data can contain a massive
+    elastic peak near 0 $cm^{-1}$, which can mess with the normalisation.
+
+    :param abins_x: The computed frequency data
+    :param abins_y: The computed S(q, w)
+    :param experimental: The experimental data in a 2D array, where the columns are the x and y data
+
+    :return: The normalised data, and the intensity of the highest peak above 50 $cm^{-1}$
+    """
     abins_start = np.where(abins_x > 50)[0][0]
     exp_start = np.where(experimental[:, 0] > 50)[0][0]
 
@@ -102,7 +186,17 @@ def normalise_data(abins_x, abins_y, experimental):
     return abins_x, abins_y, experimental, max([abins_max, exp_max])
 
 
-def split_parsed_data(data: list[list[float]]):
+def split_parsed_data(data: list[list[float]]) -> list[list[float]]:
+    """
+    Some Mantid outputs contain multiple tables of data in one file, corresponding to the partial
+    and total S(q, w). This function discards all but the last one, which is assumed to be the total
+    S(q, w). The tables are assumed to be separated by a single value (as opposed to two or three
+    columns of the data itself.
+
+    :param data: The contents of the data file in a list format.
+
+    :return: The last table, marked `2`, in the file.
+    """
     out = []
 
     for i, line in enumerate(data):
@@ -118,7 +212,12 @@ def split_parsed_data(data: list[list[float]]):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description='Script for comparing computed INS spectra with experimental equivalents. '
+                    'Takes the phonopy force constants and runs them through AbINS to calculate '
+                    'the predicted INS spectrum. This is then plotted on the same plot as the '
+                    'experimental results.'
+    )
     parser.add_argument('-c', '--cell', action='store_true',
                         help='If provided, the cell parameters are optimised')
     parser.add_argument('-a', '--arch', type=str, default='mace_mp',
