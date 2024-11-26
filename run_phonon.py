@@ -25,6 +25,8 @@ import subprocess
 from shutil import copyfile, rmtree
 
 from ase.io import read
+from ase.build.supercells import find_optimal_cell_shape
+import numpy as np
 
 
 HOME_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -33,6 +35,7 @@ OPTIMISED_DIR = os.path.join(DATA_DIR, 'optimised')
 TARGET_DIR = os.path.join(HOME_DIR, 'results')
 
 SUPERCELL = '2x2x2'
+IDEAL_VOLUME = 16 ** 3
 
 
 class InvalidLogFile(Exception):
@@ -124,8 +127,12 @@ def get_supercell(path: str) -> str:
     """
     atoms = read(path, format='vasp')
 
-    cell_lengths = atoms.cell.cellpar()[:3]
-    return 'x'.join(['1' if length > 20 else '2' for length in cell_lengths])
+    target_size = round(IDEAL_VOLUME / atoms.cell.volume)
+    upper_limit = np.ceil(target_size * 1.5)
+    upper_limit = upper_limit if upper_limit < target_size + 4 else target_size + 4
+
+    cell = find_optimal_cell_shape(atoms.cell, target_size, 'sc', target_size, upper_limit)
+    return ' '.join(cell.flatten().astype(str))
 
 
 if __name__ == '__main__':
@@ -176,9 +183,12 @@ if __name__ == '__main__':
         os.chdir(work_dir)
         copyfile(file, os.path.join(work_dir, 'POSCAR'))
 
+        supercell = get_supercell(file)
+        print(f'supercell = {supercell}')
+
         base_args = ['janus', 'phonons',
                      '--struct', './POSCAR',
-                     '--supercell', get_supercell(file),
+                     '--supercell', supercell,
                      '--arch', args.arch,
                      '--model-path', args.model_path,
                      '--calc-kwargs', '{"dispersion": True}',

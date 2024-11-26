@@ -82,10 +82,8 @@ if __name__ == '__main__':
         target_dir = os.path.join(HOME_DIR, '_'.join([args.arch, args.model_path]))
 
     if args.cell:
-        cell = '--opt-cell-lengths'
         target_dir = os.path.join(target_dir, 'cell')
     else:
-        cell = '--no-opt-cell-lengths'
         target_dir = os.path.join(target_dir, 'no_cell')
 
     duplicates_dir = os.path.join(target_dir, 'high_energy_structures')
