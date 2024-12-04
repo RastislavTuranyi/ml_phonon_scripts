@@ -26,6 +26,7 @@ from shutil import copyfile, rmtree
 
 from ase.io import read
 from ase.build.supercells import find_optimal_cell_shape
+from ase.build import make_supercell
 import numpy as np
 
 
@@ -128,10 +129,11 @@ def get_supercell(path: str) -> str:
     atoms = read(path, format='vasp')
 
     target_size = round(IDEAL_VOLUME / atoms.cell.volume)
-    upper_limit = np.ceil(target_size * 1.5)
-    upper_limit = upper_limit if upper_limit < target_size + 4 else target_size + 4
+    print(f'getting supercell: target={target_size} ')
 
-    cell = find_optimal_cell_shape(atoms.cell, target_size, 'sc', target_size, upper_limit)
+    cell = find_optimal_cell_shape(atoms.cell, target_size, 'sc', -target_size, target_size, verbose=True)
+    atoms = make_supercell(atoms, cell)
+    print(atoms.cell.lengths(), atoms.cell.angles())
     return ' '.join(cell.flatten().astype(str))
 
 
@@ -192,8 +194,9 @@ if __name__ == '__main__':
                      '--arch', args.arch,
                      '--model-path', args.model_path,
                      '--calc-kwargs', '{"dispersion": True}',
-                     '--bands', '--plot-to-file',
-                     '--file-prefix', name]
+                     '--plot-to-file',
+                     '--file-prefix', name,
+                     '--no-tracker']
         
         try:
             result = subprocess.run(base_args + ['--device', 'cuda'], check=True)
