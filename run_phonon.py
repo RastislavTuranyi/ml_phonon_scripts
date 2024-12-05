@@ -24,6 +24,7 @@ import os
 import subprocess
 from shutil import copyfile, rmtree
 
+import ase
 from ase.io import read
 from ase.build.supercells import find_optimal_cell_shape
 from ase.build import make_supercell
@@ -119,7 +120,7 @@ def is_calculation_complete(work_dir: str, name: str) -> bool:
     return False
 
 
-def get_supercell(path: str) -> str:
+def get_supercell(path: str, check_only: bool = False) -> str:
     """
     Constructs a supercell to use for the phonon calculations with janus.
 
@@ -131,10 +132,42 @@ def get_supercell(path: str) -> str:
     target_size = round(IDEAL_VOLUME / atoms.cell.volume)
     print(f'getting supercell: target={target_size} ')
 
+    if target_size > 16:
+        sc_cell = get_sc_supercell(np.asarray(atoms.cell), target_size)
+        #print(sc_cell, [i for i in sc_cell.flatten() if i != 0])
+        factor = np.gcd.reduce([i for i in sc_cell.flatten() if i != 0])
+        
+        if factor == 1:
+            factor = np.gcd.reduce([i for i in sc_cell.flatten() if i > 1])
+
+            if factor == 1 and target_size > 24:
+                factor = int(target_size / 8)
+
+        target_size = int(target_size / factor)
+        print(f'new target size = {target_size} (factor={factor})')
+
+    if check_only:
+        return None
+
     cell = find_optimal_cell_shape(atoms.cell, target_size, 'sc', -target_size, target_size, verbose=True)
+    
+    try:
+        cell *= factor
+    except NameError:
+        pass
+    
     atoms = make_supercell(atoms, cell)
     print(atoms.cell.lengths(), atoms.cell.angles())
     return ' '.join(cell.flatten().astype(str))
+
+
+def get_sc_supercell(cell: np.ndarray, target: int):
+    metric = np.eye(3)
+    norm = (target * abs(np.linalg.det(cell)) / np.linalg.det(metric)) ** (-1 / 3)
+    norm_cell = norm * cell
+
+    ideal = np.dot(metric, np.linalg.inv(norm_cell))
+    return np.array(np.around(ideal, 0), dtype=int)
 
 
 if __name__ == '__main__':
@@ -146,6 +179,8 @@ if __name__ == '__main__':
                         help='The "--arch" parameter for Janus.')
     parser.add_argument('-mp', '--model-path', type=str, default='large',
                         help='The "--model-path" parameter for Janus.')
+    parser.add_argument('-cs', '--check-supercells', action='store_true',
+                        help='Disregards everything and only print out the supercell target sizes.')
     args = parser.parse_args()
 
     if os.path.exists(args.model_path):
@@ -178,14 +213,21 @@ if __name__ == '__main__':
         work_dir = os.path.join(dest_dir, name)
         print(name)
 
-        if has_symmetry_changed(src_dir, name) or is_calculation_complete(work_dir, name):
-            continue
-
-        os.makedirs(work_dir)
+        if not args.check_supercells:
+            if has_symmetry_changed(src_dir, name) or is_calculation_complete(work_dir, name):
+               continue
+        
+        os.makedirs(work_dir, exist_ok=True)
         os.chdir(work_dir)
-        copyfile(file, os.path.join(work_dir, 'POSCAR'))
+        try:
+            copyfile(file, os.path.join(work_dir, 'POSCAR'))
+        except FileExistsError:
+            if not args.check_supercells:
+                raise
 
-        supercell = get_supercell(file)
+        supercell = get_supercell(file, args.check_supercells)
+        if supercell is None:
+            continue
         print(f'supercell = {supercell}')
 
         base_args = ['janus', 'phonons',
