@@ -18,14 +18,15 @@ retried with `PYTORCH_CUDA_ALLOC_CONF = 'expandable_segments:True'` environment 
 hopes that that might help, and should there still not be enough memory, the computation will
 instead be run on the CPU, which will likely take significant resources.
 """
+from __future__ import annotations
+
 import argparse
 import glob
 import os
 import subprocess
 from shutil import copyfile, rmtree
 
-import ase
-from ase.io import read
+from ase.io import read, write
 from ase.build.supercells import find_optimal_cell_shape
 from ase.build import make_supercell
 import numpy as np
@@ -38,6 +39,7 @@ TARGET_DIR = os.path.join(HOME_DIR, 'results')
 
 SUPERCELL = '2x2x2'
 IDEAL_VOLUME = 16 ** 3
+MINIMUM_CUTOFF = 7.5
 
 
 class InvalidLogFile(Exception):
@@ -120,7 +122,7 @@ def is_calculation_complete(work_dir: str, name: str) -> bool:
     return False
 
 
-def get_supercell(path: str, check_only: bool = False) -> str:
+def get_supercell(path: str, multiplier: float = 1.) -> str | None:
     """
     Constructs a supercell to use for the phonon calculations with janus.
 
@@ -128,37 +130,40 @@ def get_supercell(path: str, check_only: bool = False) -> str:
     :return: The supercell as a string for input to janus phonons CLI.
     """
     atoms = read(path, format='vasp')
+    write(os.path.join(os.path.dirname(path), 'geometry.in'), atoms)
 
     target_size = round(IDEAL_VOLUME / atoms.cell.volume)
-    print(f'getting supercell: target={target_size} ')
+    target_n = len(atoms.get_atomic_numbers()) * target_size * multiplier
+    print(f'getting supercell: target={target_size} target n atom={target_n}')
 
-    if target_size > 16:
-        sc_cell = get_sc_supercell(np.asarray(atoms.cell), target_size)
-        #print(sc_cell, [i for i in sc_cell.flatten() if i != 0])
-        factor = np.gcd.reduce([i for i in sc_cell.flatten() if i != 0])
-        
-        if factor == 1:
-            factor = np.gcd.reduce([i for i in sc_cell.flatten() if i > 1])
+    result = subprocess.run(['vibes', 'utils', 'make-supercell', 'geometry.in', '-n', str(target_n)],
+                            capture_output=True, encoding='utf8')
 
-            if factor == 1 and target_size > 24:
-                factor = int(target_size / 8)
+    for line in result.stdout:
+        if 'python:' in line:
+            cell = line.replace('python:', '').strip()[1:-1]
+            break
+    else:
+        raise Exception()
 
-        target_size = int(target_size / factor)
-        print(f'new target size = {target_size} (factor={factor})')
+    for line in result.stdout:
+        if 'Largest Cutoff' in line:
+            cut_off = float(line.split()[-2])
+            break
+    else:
+        raise Exception()
 
-    if check_only:
-        return None
+    for geometry in glob.glob(os.path.join(os.path.dirname(path), '*.in')):
+        os.remove(geometry)
 
-    cell = find_optimal_cell_shape(atoms.cell, target_size, 'sc', -target_size, target_size, verbose=True)
-    
-    try:
-        cell *= factor
-    except NameError:
-        pass
-    
-    atoms = make_supercell(atoms, cell)
-    print(atoms.cell.lengths(), atoms.cell.angles())
-    return ' '.join(cell.flatten().astype(str))
+    if cut_off < MINIMUM_CUTOFF:
+        if multiplier > 1:
+            print(f'FAILED!!!!!!!!!!!!!!!!   max_cutoff={cut_off}')
+            return None
+
+        cell = get_supercell(path, 1.5)
+
+    return cell
 
 
 def get_sc_supercell(cell: np.ndarray, target: int):
@@ -225,10 +230,11 @@ if __name__ == '__main__':
             if not args.check_supercells:
                 raise
 
-        supercell = get_supercell(file, args.check_supercells)
-        if supercell is None:
-            continue
+        supercell = get_supercell(file)
         print(f'supercell = {supercell}')
+
+        if supercell is None or args.check_supercells:
+            continue
 
         base_args = ['janus', 'phonons',
                      '--struct', './POSCAR',
