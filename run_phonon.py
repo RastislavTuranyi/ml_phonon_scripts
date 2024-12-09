@@ -122,7 +122,7 @@ def is_calculation_complete(work_dir: str, name: str) -> bool:
     return False
 
 
-def get_supercell(path: str, multiplier: float = 1.) -> str | None:
+def get_supercell(path: str, work_dir: str, multiplier: float = 1.) -> str | None:
     """
     Constructs a supercell to use for the phonon calculations with janus.
 
@@ -130,38 +130,43 @@ def get_supercell(path: str, multiplier: float = 1.) -> str | None:
     :return: The supercell as a string for input to janus phonons CLI.
     """
     atoms = read(path, format='vasp')
-    write(os.path.join(os.path.dirname(path), 'geometry.in'), atoms)
+    geom_path = os.path.join(work_dir, 'geometry.in')
+    write(geom_path, atoms)
 
     target_size = round(IDEAL_VOLUME / atoms.cell.volume)
     target_n = len(atoms.get_atomic_numbers()) * target_size * multiplier
     print(f'getting supercell: target={target_size} target n atom={target_n}')
 
-    result = subprocess.run(['vibes', 'utils', 'make-supercell', 'geometry.in', '-n', str(target_n)],
+    result = subprocess.run(['vibes', 'utils', 'make-supercell', 
+                             geom_path, '-n', str(int(target_n))],
                             capture_output=True, encoding='utf8')
 
-    for line in result.stdout:
-        if 'python:' in line:
-            cell = line.replace('python:', '').strip()[1:-1]
+    for line in result.stdout.split('\n'):
+        if 'cmdline:' in line:
+            cell = line.replace('cmdline:', '').strip()
             break
     else:
+        if 'LinAlgError' in result.stderr:
+            return get_supercell(path, work_dir, multiplier + 0.5)
+        print(result.returncode, result.stdout, result.stderr)
         raise Exception()
 
-    for line in result.stdout:
+    for line in result.stdout.split('\n'):
         if 'Largest Cutoff' in line:
             cut_off = float(line.split()[-2])
             break
     else:
         raise Exception()
 
-    for geometry in glob.glob(os.path.join(os.path.dirname(path), '*.in')):
+    for geometry in glob.glob(os.path.join(work_dir, '*.in')):
         os.remove(geometry)
 
     if cut_off < MINIMUM_CUTOFF:
-        if multiplier > 1:
+        if target_n > 1000:
             print(f'FAILED!!!!!!!!!!!!!!!!   max_cutoff={cut_off}')
             return None
 
-        cell = get_supercell(path, 1.5)
+        cell = get_supercell(path, work_dir, multiplier + 0.5)
 
     return cell
 
@@ -186,6 +191,8 @@ if __name__ == '__main__':
                         help='The "--model-path" parameter for Janus.')
     parser.add_argument('-cs', '--check-supercells', action='store_true',
                         help='Disregards everything and only print out the supercell target sizes.')
+    parser.add_argument('-rs', '--redo-supercells', action='store_true',
+                        help='Redoes the supercells')
     args = parser.parse_args()
 
     if os.path.exists(args.model_path):
@@ -230,10 +237,19 @@ if __name__ == '__main__':
             if not args.check_supercells:
                 raise
 
-        supercell = get_supercell(file)
-        print(f'supercell = {supercell}')
+        supercell_path = os.path.join(work_dir, 'supercell.npy')
+        if os.path.exists(supercell_path) and not args.redo_supercells:
+            supercell = np.load(supercell_path)
+            print(f'supercell = {supercell}')
+        else:
+            supercell = get_supercell(file, work_dir)
+            if supercell is None:
+                continue
+        
+            print(f'supercell = {supercell}')
+            np.save(supercell_path, np.array(supercell.split()).astype(int))
 
-        if supercell is None or args.check_supercells:
+        if args.check_supercells:
             continue
 
         base_args = ['janus', 'phonons',
