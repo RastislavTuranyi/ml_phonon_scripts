@@ -1,4 +1,5 @@
 import argparse
+from contextlib import redirect_stdout
 import glob
 import os
 
@@ -61,6 +62,9 @@ if __name__ == '__main__':
 
     directories = glob.glob(os.path.join(results_dir, '*', ''))
 
+
+    failed_supercells = []
+    successful_supercells = []
     for dir in directories:
         compound = os.path.split(os.path.split(dir)[0])[-1]
         print(compound)
@@ -78,17 +82,30 @@ if __name__ == '__main__':
             phonons = np.load(out)
             phonons_correction = np.load(out_correction)
         else:
-            force_constants = ForceConstants.from_phonopy(
-                path=dir,
-                summary_name=f'{compound}-phonopy.yaml',
-                fc_name=f'{compound}-force_constants.hdf5'
-            )
+            try:
+                with redirect_stdout(None):
+                    force_constants = ForceConstants.from_phonopy(
+                        path=dir,
+                        summary_name=f'{compound}-phonopy.yaml',
+                        fc_name=f'{compound}-force_constants.hdf5'
+                    )
+            except RuntimeError:
+                supercell = np.load(os.path.join(dir, 'supercell.npy'))
+                print('euphonic failed - supercell=', supercell, ' det=', np.linalg.det(supercell.reshape((3, 3))))
+                failed_supercells.append(supercell)
+                print()
+                continue
+            except FileNotFoundError:
+                print('No supercell\n')
+                continue
 
             phonons = force_constants.calculate_qpoint_phonon_modes(GRID).frequencies.magnitude
             phonons_correction = force_constants.calculate_qpoint_phonon_modes(GRID, asr='reciprocal').frequencies.magnitude
 
             np.save(out, phonons)
             np.save(out_correction, phonons_correction)
+
+        successful_supercells.append(np.load(os.path.join(dir, 'supercell.npy')))     
 
         imaginary = np.sum(phonons < 0, axis=0) > 0
         imaginary_correction = np.sum(phonons_correction < 0, axis=0) > 0
@@ -119,3 +136,6 @@ if __name__ == '__main__':
                 pass
 
         print()
+
+    np.save(os.path.join(results_dir, 'failed_supercells.npy'), failed_supercells)
+    np.save(os.path.join(results_dir, 'successful_supercells.npy'), successful_supercells)
