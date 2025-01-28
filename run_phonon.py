@@ -261,7 +261,8 @@ if __name__ == '__main__':
                      '--plot-to-file',
                      '--file-prefix', name,
                      '--no-tracker']
-        
+        # TODO: Compute bands but with no-write-mesh option
+
         try:
             result = subprocess.run(base_args + ['--device', 'cuda'], check=True)
         except subprocess.CalledProcessError:

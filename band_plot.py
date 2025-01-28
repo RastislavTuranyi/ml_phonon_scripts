@@ -10,6 +10,37 @@ import euphonic
 from euphonic.plot import plot_1d
 
 
+def plot_bands(phonons: euphonic.QpointPhononModes, out_path: str):
+    phonons.reorder_frequencies()
+    bands = phonons.get_dispersion().split(btol=5.)
+
+    y_max = 0
+    for band in bands:
+        band._y_data = band.y_data.to(unit).magnitude
+        m = np.max(band._y_data)
+        if m > y_max:
+            y_max = m
+
+    # TODO: Look at band structures to figure out instabilities
+    if y_max > 3000:
+        y_max = np.ceil(y_max / 500) * 500
+    else:
+        y_max = np.ceil(y_max / 200) * 200
+
+    # bands = bands.split(btol=5.)
+    fig = plot_1d(bands, ylabel=ylabel, color='#E94D36', alpha=0.8)
+
+    for ax in fig.axes:
+        ax.plot(ax.get_xlim(), [0, 0], alpha=0.5, c='#1E5DF8', linestyle=':', linewidth=1)
+        ax.tick_params(labelsize=13)
+        ax.set_ylim(top=y_max)
+
+    fig.axes[-1].set_ylabel(ylabel, fontsize=20, labelpad=16)
+    fig.tight_layout()
+
+    fig.savefig(out_path, dpi=2000)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Script for producing a customised phonopy-style '
                                                  'band plot.')
@@ -36,41 +67,16 @@ if __name__ == '__main__':
 
     path, name = os.path.split(args.input)
 
-    phonons = euphonic.QpointPhononModes.from_phonopy(path, name)
-    phonons.reorder_frequencies()
-
-    bands = phonons.get_dispersion().split(btol=5.)
-    y_max = 0
-
-    for band in bands:
-        band._y_data = band.y_data.to(unit).magnitude
-        m = np.max(band._y_data)
-        if m > y_max:
-            y_max = m
-
-    if y_max > 3000:
-        y_max = np.ceil(y_max / 500) * 500
-    else:
-        y_max = np.ceil(y_max / 200) * 200
-    #bands = bands.split(btol=5.)
-
-    fig = plot_1d(bands, ylabel=ylabel, color='#E94D36', alpha=0.8)
-
-    for ax in fig.axes:
-        ax.plot(ax.get_xlim(), [0, 0], alpha=0.5, c='#1E5DF8', linestyle=':', linewidth=1)
-        ax.tick_params(labelsize=13)
-        ax.set_ylim(top=y_max)
-
-    fig.axes[-1].set_ylabel(ylabel, fontsize=20, labelpad=16)
-    
-    fig.tight_layout()
+    ps = euphonic.QpointPhononModes.from_phonopy(path, name)
 
     if args.output:
         output = os.path.split(args.output)
         if output[0]:
-            fig.savefig(args.output, dpi=2000)
+            out_path = args.output
         else:
-            fig.savefig(str(os.path.join(path, args.output)), dpi=2000)
+            out_path = str(os.path.join(path, args.output))
     else:
         out_name = name.split('.')[0].replace('-auto_bands', '_bands.png')
-        fig.savefig(str(os.path.join(path, out_name)), dpi=2000)
+        out_path = str(os.path.join(path, out_name))
+
+    plot_bands(ps, out_path)

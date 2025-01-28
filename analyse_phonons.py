@@ -8,6 +8,8 @@ import numpy as np
 from euphonic import ForceConstants
 from euphonic.util import mp_grid
 
+from .band_plot import plot_bands
+
 HOME_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(HOME_DIR, 'results')
 
@@ -45,6 +47,10 @@ if __name__ == '__main__':
                         help='The "--arch" parameter for Janus.')
     parser.add_argument('-mp', '--model-path', type=str, default='large',
                         help='The "--model-path" parameter for Janus.')
+    parser.add_argument('-p', '--plot', action='store_true',
+                        help='Computes the band structure and plots the result')
+    parser.add_argument('-r', '--recompute', action='store_true',
+                        help='Recomputes phonons')
     parser.add_argument('-t', '--tolerance', type=float, default=IMAGINARY_MODE_TOLERANCE,
                         help='The tolerance for imaginary modes')
     args = parser.parse_args()
@@ -78,7 +84,7 @@ if __name__ == '__main__':
         out = os.path.join(dir, f'{compound}_frequencies.npy')
         out_correction = os.path.join(dir, f'{compound}_frequencies_corrected.npy')
 
-        if os.path.exists(out) and os.path.exists(out_correction):
+        if not args.recompute and os.path.exists(out) and os.path.exists(out_correction):
             phonons = np.load(out)
             phonons_correction = np.load(out_correction)
         else:
@@ -100,7 +106,12 @@ if __name__ == '__main__':
                 continue
 
             phonons = force_constants.calculate_qpoint_phonon_modes(GRID).frequencies.magnitude
-            phonons_correction = force_constants.calculate_qpoint_phonon_modes(GRID, asr='reciprocal').frequencies.magnitude
+            phonons_correction = force_constants.calculate_qpoint_phonon_modes(GRID, asr='reciprocal')
+
+            if args.plot:
+                plot_bands(phonons_correction, str(os.path.join(dir, f'{compound}_bands.png')))
+
+            phonons_correction = phonons_correction.frequencies.magnitude
 
             np.save(out, phonons)
             np.save(out_correction, phonons_correction)
