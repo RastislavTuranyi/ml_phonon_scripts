@@ -10,7 +10,7 @@ import euphonic
 from euphonic.plot import plot_1d
 
 
-def plot_bands(phonons: euphonic.QpointPhononModes, out_path: str):
+def plot_bands(phonons: euphonic.QpointPhononModes, out_path: str, unit: str = 'reciprocal_centimeter', ylabel: str = 'Frequency ($cm^{-1}$)'):
     phonons.reorder_frequencies()
     bands = phonons.get_dispersion().split(btol=5.)
 

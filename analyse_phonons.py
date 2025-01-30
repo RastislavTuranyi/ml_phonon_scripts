@@ -8,7 +8,7 @@ import numpy as np
 from euphonic import ForceConstants
 from euphonic.util import mp_grid
 
-from .band_plot import plot_bands
+from band_plot import plot_bands
 
 HOME_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(HOME_DIR, 'results')
