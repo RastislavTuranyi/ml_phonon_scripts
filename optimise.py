@@ -33,7 +33,8 @@ def recompute_changed(original_file: str,
                       filter_func,
                       fkwargs: dict,
                       okwargs: dict,
-                      tkwargs: dict):
+                      tkwargs: dict,
+                      dispersion: bool = True):
     # Move output file to extra data dir and rename the dir
     os.rename(original_file, os.path.join(original_dir, original_name))
     try:
@@ -51,7 +52,7 @@ def recompute_changed(original_file: str,
                         arch=arch,
                         device='cuda',
                         model_path=model_path,
-                        calc_kwargs={'dispersion': True},
+                        calc_kwargs={'dispersion': dispersion},
                         attach_logger=True,
                         fmax=FMAX,
                         steps=MAX_STEPS,
@@ -59,7 +60,8 @@ def recompute_changed(original_file: str,
                         filter_func=filter_func,
                         filter_kwargs=fkwargs,
                         opt_kwargs=okwargs,
-                        traj_kwargs=tkwargs)
+                        traj_kwargs=tkwargs,
+                        track_carbon=False)
     optimiser.run()
     final_force = np.linalg.norm(optimiser.struct.get_forces(), axis=1).max()
 
@@ -81,7 +83,7 @@ def recompute_changed(original_file: str,
     return final_force, same
 
 
-def check_cif2cell_vesta(save_dir: str, top_dir: str, arch: str, model_path: str):
+def check_cif2cell_vesta(save_dir: str, top_dir: str, arch: str, model_path: str, dispersion: bool = True):
     print('Comparing cif2cell and vesta files')
     vesta_files = glob.glob(os.path.join(save_dir, '*_vesta.vasp'))
 
@@ -105,14 +107,14 @@ def check_cif2cell_vesta(save_dir: str, top_dir: str, arch: str, model_path: str
         if os.path.exists(vesta_energy):
             vesta_energy = np.load(vesta_energy)[0]
         else:
-            vesta_energy = compute_one_energy(vesta_file, arch, model_path)
+            vesta_energy = compute_one_energy(vesta_file, arch, model_path, dispersion)
 
         cif2cell_dir = os.path.join(cif2cell_file.replace('.vasp', ''), 'extra_data', cif2cell_name)
         cif2cell_energy = os.path.join(cif2cell_dir, 'final.npy')
         if os.path.exists(cif2cell_energy):
             cif2cell_energy = np.load(cif2cell_energy)[0]
         else:
-            cif2cell_energy = compute_one_energy(cif2cell_file, arch, model_path)
+            cif2cell_energy = compute_one_energy(cif2cell_file, arch, model_path, dispersion)
 
         if cif2cell_energy > vesta_energy:
             print('VESTA file lower in energy')
@@ -122,14 +124,15 @@ def check_cif2cell_vesta(save_dir: str, top_dir: str, arch: str, model_path: str
             print('cif2cell file lower in energy')
 
 
-def compute_one_energy(file_path: str, arch: str, model_path: str) -> float:
+def compute_one_energy(file_path: str, arch: str, model_path: str, dispersion: bool = True) -> float:
     atoms = read(file_path, format='vasp')
     sp = SinglePoint(struct=atoms,
                      arch=arch,
                      device='cuda',
                      model_path=model_path,
-                     calc_kwargs={'dispersion': True},
-                     properties='energy')
+                     calc_kwargs={'dispersion': dispersion},
+                     properties='energy',
+                     track_carbon=False)
 
     result = sp.run()
     return result['energy'] / len(atoms)
@@ -141,12 +144,13 @@ def run_geometry_optimisation(atoms: ase.Atoms,
                               filter_func,
                               filter_kwargs: dict,
                               okwargs: dict,
-                              tkwargs: dict):
+                              tkwargs: dict,
+                              dispersion: bool = True):
     optimiser = GeomOpt(struct=atoms,
                         arch=arch,
                         device='cuda',
                         model_path=model_path,
-                        calc_kwargs={'dispersion': True},
+                        calc_kwargs={'dispersion': dispersion},
                         attach_logger=True,
                         fmax=FMAX,
                         steps=MAX_STEPS,
@@ -154,7 +158,8 @@ def run_geometry_optimisation(atoms: ase.Atoms,
                         filter_func=filter_func,
                         filter_kwargs=filter_kwargs,
                         opt_kwargs=okwargs,
-                        traj_kwargs=tkwargs)
+                        traj_kwargs=tkwargs,
+                        track_carbon=False)
     optimiser.run()
     return optimiser
 
@@ -178,8 +183,10 @@ if __name__ == '__main__':
     parser.add_argument('-sf', '--skip-failed', action='store_true',
                         help='Causes previously known failed calculations (due to either symmetry having changed or '
                              'because it did not converge) to be skipped instead of recomputing.')
+    parser.add_argument('-dd', '--disable-dispersion', action='store_true', help='Disables dispersion')
     args = parser.parse_args()
 
+    dispersion = not args.disable_dispersion
     filter_func = DEFAULT_FILTER_FUNC if args.cell else None
     filter_kwargs = {'hydrostatic_strain': args.cell}
 
@@ -188,6 +195,8 @@ if __name__ == '__main__':
         target_dir = os.path.join(TARGET_DIR, '_'.join([args.arch, p]))
     else:
         target_dir = os.path.join(TARGET_DIR, '_'.join([args.arch, args.model_path]))
+
+    args.model_path = None if args.model_path == 'None' else args.model_path
 
     target_dir = os.path.join(target_dir, 'cell') if args.cell else os.path.join(target_dir, 'no_cell')
 
@@ -217,7 +226,8 @@ if __name__ == '__main__':
             if os.path.exists(os.path.join(out_dir, 'spacegroup_changed')):
                 print('Recomputing data because space group in the original was changed')
                 final_force, sg_same = recompute_changed(out_path, out_dir, name, file, args.cell, args.arch,
-                                                         args.model_path, filter_func, filter_kwargs, opt_kwargs, traj_kwargs)
+                                                         args.model_path, filter_func, filter_kwargs, opt_kwargs, traj_kwargs,
+                                                         dispersion)
                 if final_force > FMAX:
                     print('WARNING: Constrained optimisation did not converge')
                     not_converged.append(name)
@@ -251,50 +261,55 @@ if __name__ == '__main__':
 
         atoms = read(file, format='vasp')
         optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_func, filter_kwargs,
-                                              opt_kwargs, traj_kwargs)
+                                              opt_kwargs, traj_kwargs, dispersion)
         energy = optimiser.struct.get_potential_energy()
 
-        sg_same = optimiser.struct.info['initial_spacegroup'] != optimiser.struct.info['final_spacegroup']
-        if sg_same:
+        sg_different = optimiser.struct.info['initial_spacegroup'] != optimiser.struct.info['final_spacegroup']
+        if sg_different:
             print('Space group changed during optimisation -> retrying with fixed symmetry')
 
             atoms = read(file, format='vasp')
             atoms.set_constraint(FixSymmetry(atoms=atoms, adjust_positions=True, adjust_cell=args.cell))
             optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_func, filter_kwargs,
-                                                  opt_kwargs, traj_kwargs)
+                                                  opt_kwargs, traj_kwargs, dispersion)
 
             energy2 = optimiser.struct.get_potential_energy()
             print(f'Original energy: {energy}; new energy: {energy2}')
             energy = energy2
 
-            sg_same = optimiser.struct.info['initial_spacegroup'] == optimiser.struct.info['final_spacegroup']
-            if sg_same:
+            sg_different = optimiser.struct.info['initial_spacegroup'] != optimiser.struct.info['final_spacegroup']
+            if not sg_different:
                 title = 'spacegroup_conserved'
             else:
                 print('Space group changed despite ASE constraint')
                 title = 'spacegroup_changed'
                 changed_despite_constraint.append(name)
         else:
+            print('space group not changed')
             title = 'spacegroup_conserved'
-
-        write(out_path, optimiser.struct, format='vasp')
-
-        with open(os.path.join(out_dir, title), 'w') as f:
-            f.write(optimiser.struct.info['initial_spacegroup'] + '   ' + optimiser.struct.info['final_spacegroup'])
-
+        
         final_force = np.linalg.norm(optimiser.struct.get_forces(), axis=1).max()
         np.save(os.path.join(out_dir, 'final.npy'), np.array([energy / len(atoms), final_force]))
+
+        write(out_path, optimiser.struct, format='vasp')
 
         if final_force > FMAX:
             print('WARNING: Optimisation not converged')
             not_converged.append(name)
             os.rename(out_path, os.path.join(not_converged_dir, name))
         else:
-            if sg_same:
+            if not sg_different:
                 # Remove trajectory if everything ok
                 os.remove(traj_kwargs['filename'])
             else:
                 os.rename(out_path, os.path.join(sg_changed_dir, name))
+
+        try:
+            with open(os.path.join(out_dir, title), 'w') as f:
+                f.write(optimiser.struct.info['initial_spacegroup'] + '   ' + optimiser.struct.info['final_spacegroup'])
+        except TypeError:
+            if final_force < FMAX:
+                raise
 
         os.chdir(DATA_DIR)
 
