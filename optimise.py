@@ -34,7 +34,8 @@ def recompute_changed(original_file: str,
                       fkwargs: dict,
                       okwargs: dict,
                       tkwargs: dict,
-                      dispersion: bool = True):
+                      dispersion: bool = True,
+                      fmax=FMAX):
     # Move output file to extra data dir and rename the dir
     os.rename(original_file, os.path.join(original_dir, original_name))
     try:
@@ -54,7 +55,7 @@ def recompute_changed(original_file: str,
                         model_path=model_path,
                         calc_kwargs={'dispersion': dispersion},
                         attach_logger=True,
-                        fmax=FMAX,
+                        fmax=fmax,
                         steps=MAX_STEPS,
                         write_results=True,
                         filter_func=filter_func,
@@ -145,14 +146,15 @@ def run_geometry_optimisation(atoms: ase.Atoms,
                               filter_kwargs: dict,
                               okwargs: dict,
                               tkwargs: dict,
-                              dispersion: bool = True):
+                              dispersion: bool = True,
+                              fmax: float = FMAX):
     optimiser = GeomOpt(struct=atoms,
                         arch=arch,
                         device='cuda',
                         model_path=model_path,
                         calc_kwargs={'dispersion': dispersion},
                         attach_logger=True,
-                        fmax=FMAX,
+                        fmax=fmax,
                         steps=MAX_STEPS,
                         write_results=True,
                         filter_func=filter_func,
@@ -184,6 +186,7 @@ if __name__ == '__main__':
                         help='Causes previously known failed calculations (due to either symmetry having changed or '
                              'because it did not converge) to be skipped instead of recomputing.')
     parser.add_argument('-dd', '--disable-dispersion', action='store_true', help='Disables dispersion')
+    parser.add_argument('-f', '--fmax', type=float, help=f'The FMAX to use for optimisation ({FMAX} by default)')
     args = parser.parse_args()
 
     dispersion = not args.disable_dispersion
@@ -227,8 +230,8 @@ if __name__ == '__main__':
                 print('Recomputing data because space group in the original was changed')
                 final_force, sg_same = recompute_changed(out_path, out_dir, name, file, args.cell, args.arch,
                                                          args.model_path, filter_func, filter_kwargs, opt_kwargs, traj_kwargs,
-                                                         dispersion)
-                if final_force > FMAX:
+                                                         dispersion, fmax=args.fmax)
+                if final_force > args.fmax:
                     print('WARNING: Constrained optimisation did not converge')
                     not_converged.append(name)
                     os.rename(out_path, os.path.join(not_converged_dir, name))
@@ -261,7 +264,7 @@ if __name__ == '__main__':
 
         atoms = read(file, format='vasp')
         optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_func, filter_kwargs,
-                                              opt_kwargs, traj_kwargs, dispersion)
+                                              opt_kwargs, traj_kwargs, dispersion, fmax=args.fmax)
         energy = optimiser.struct.get_potential_energy()
 
         sg_different = optimiser.struct.info['initial_spacegroup'] != optimiser.struct.info['final_spacegroup']
@@ -271,7 +274,7 @@ if __name__ == '__main__':
             atoms = read(file, format='vasp')
             atoms.set_constraint(FixSymmetry(atoms=atoms, adjust_positions=True, adjust_cell=args.cell))
             optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_func, filter_kwargs,
-                                                  opt_kwargs, traj_kwargs, dispersion)
+                                                  opt_kwargs, traj_kwargs, dispersion, fmax=args.fmax)
 
             energy2 = optimiser.struct.get_potential_energy()
             print(f'Original energy: {energy}; new energy: {energy2}')
@@ -293,7 +296,7 @@ if __name__ == '__main__':
 
         write(out_path, optimiser.struct, format='vasp')
 
-        if final_force > FMAX:
+        if final_force > args.fmax:
             print('WARNING: Optimisation not converged')
             not_converged.append(name)
             os.rename(out_path, os.path.join(not_converged_dir, name))
@@ -308,7 +311,7 @@ if __name__ == '__main__':
             with open(os.path.join(out_dir, title), 'w') as f:
                 f.write(optimiser.struct.info['initial_spacegroup'] + '   ' + optimiser.struct.info['final_spacegroup'])
         except TypeError:
-            if final_force < FMAX:
+            if final_force < args.fmax:
                 raise
 
         os.chdir(DATA_DIR)
