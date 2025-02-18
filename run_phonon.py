@@ -217,6 +217,7 @@ if __name__ == '__main__':
         if not os.path.exists(dest_dir):
             os.makedirs(dest_dir)
 
+    args.model_path = None if args.model_path == 'None' else args.model_path
     data_files = sorted(glob.glob(os.path.join(src_dir, '*.vasp')))
     #print(data_files)
     
@@ -256,12 +257,13 @@ if __name__ == '__main__':
                      '--struct', './POSCAR',
                      '--supercell', supercell,
                      '--arch', args.arch,
-                     '--model-path', args.model_path,
                      '--calc-kwargs', '{"dispersion": True}',
                      '--plot-to-file',
                      '--file-prefix', name,
                      '--no-tracker']
         # TODO: Compute bands but with no-write-mesh option
+        if args.model_path is not None:
+            base_args.extend(['--model-path', args.model_path])
 
         try:
             result = subprocess.run(base_args + ['--device', 'cuda'], check=True)
