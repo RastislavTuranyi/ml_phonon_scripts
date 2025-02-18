@@ -186,7 +186,8 @@ if __name__ == '__main__':
                         help='Causes previously known failed calculations (due to either symmetry having changed or '
                              'because it did not converge) to be skipped instead of recomputing.')
     parser.add_argument('-dd', '--disable-dispersion', action='store_true', help='Disables dispersion')
-    parser.add_argument('-f', '--fmax', type=float, help=f'The FMAX to use for optimisation ({FMAX} by default)')
+    parser.add_argument('-f', '--fmax', type=float, default=FMAX, 
+                        help=f'The FMAX to use for optimisation ({FMAX} by default)')
     args = parser.parse_args()
 
     dispersion = not args.disable_dispersion
