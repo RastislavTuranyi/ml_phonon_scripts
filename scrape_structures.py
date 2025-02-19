@@ -214,7 +214,7 @@ def scrape(redo_failed: bool = True):
             writer.writerow(new_csv[-1])
             print(line[0])
 
-            if line[3] or (line[6] and not redo_failed and line[6][:6] == 'script'):  # CIF file or reason for no file
+            if line[3] or (line[6] and not redo_failed and line[6][:6] != 'script'):  # CIF file or reason for no file
                 new_csv.append(line)
                 print('exists')
                 continue
@@ -270,11 +270,12 @@ def scrape(redo_failed: bool = True):
                     print('FOUND without deuteration')
                     continue
 
-            if result := search_for_results(line[10].lower(), line):
-                new_csv.append(result)
-                count_added += 1
-                print('FOUND using other name')
-                continue
+            if line[10]:
+                if result := search_for_results(line[10].lower(), line):
+                    new_csv.append(result)
+                    count_added += 1
+                    print('FOUND using other name')
+                    continue
 
             if result := search_synonyms(name, line):
                 new_csv.append(result)
@@ -294,7 +295,7 @@ def scrape(redo_failed: bool = True):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Script for scraping data from the CSD database.')
-    parser.add_argument('-rf', '==redo-failed', action='store_true',
+    parser.add_argument('-rf', '--redo-failed', action='store_true',
                         help='Causes the previously failed compounds to be re-attempted.')
     args = parser.parse_args()
 
