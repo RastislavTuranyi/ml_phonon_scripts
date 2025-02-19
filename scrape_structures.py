@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import csv
 import re
 import os
@@ -292,7 +293,12 @@ def scrape(redo_failed: bool = True):
 
 
 if __name__ == '__main__':
-    changed = scrape()
+    parser = argparse.ArgumentParser(description='Script for scraping data from the CSD database.')
+    parser.add_argument('-rf', '==redo-failed', action='store_true',
+                        help='Causes the previously failed compounds to be re-attempted.')
+    args = parser.parse_args()
+
+    changed = scrape(args.redo_failed)
 
     # with open(os.path.join(HOME_DIR, 'new_data.csv'), 'w', newline='') as file:
     #     writer = csv.writer(file, delimiter=',')
