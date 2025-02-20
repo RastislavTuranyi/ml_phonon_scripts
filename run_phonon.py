@@ -306,7 +306,7 @@ def main(args):
             supercell = ' '.join(supercell)
             print(f'supercell = {supercell}')
         else:
-            supercell = get_new_supercell(file, work_dir, asymmetric_path, args.force_symmetric)
+            supercell = get_new_supercell(file, work_dir, supercell_path, asymmetric_path, args.force_symmetric)
             if supercell is None:
                 continue
 
