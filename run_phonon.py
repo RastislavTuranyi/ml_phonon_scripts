@@ -220,7 +220,7 @@ def get_new_supercell(file: str,
     if cell is None:
         if force_symmetric:
             new_cell =  get_symmetric_supercell(file)
-            print(f'supercell = {supercell} (changed from {cell})')
+            print(f'supercell = {cell} (changed from {cell})')
             np.save(supercell_path, np.array(new_cell.split()).astype(int))
 
             return new_cell
@@ -234,35 +234,18 @@ def get_new_supercell(file: str,
         np.save(asymmetric_path, cell_arr)
         new_cell = get_symmetric_supercell(file)
 
-        print(f'supercell = {supercell} (changed from {cell})')
+        print(f'supercell = {cell} (changed from {cell})')
         np.save(supercell_path, np.array(new_cell.split()).astype(int))
 
         return new_cell
     else:
-        print(f'supercell = {supercell}')
+        print(f'supercell = {cell}')
         np.save(supercell_path, cell_arr)
 
         return cell
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--cell', action='store_true',
-                        help='If provided, the cell parameters are optimised')
-    parser.add_argument('-r', '--restart', action='store_true', help='Recomputes completed calculations')
-    parser.add_argument('-a', '--arch', type=str, default='mace_mp',
-                        help='The "--arch" parameter for Janus.')
-    parser.add_argument('-mp', '--model-path', type=str, default='large',
-                        help='The "--model-path" parameter for Janus.')
-    parser.add_argument('-cs', '--check-supercells', action='store_true',
-                        help='Disregards everything and only print out the supercell target sizes.')
-    parser.add_argument('-rs', '--redo-supercells', action='store_true',
-                        help='Redoes the supercells')
-    parser.add_argument('-fs', '--force-symmetric', action='store_true',
-                        help='Forces all supercells to be symmetric, even if an asymmetric cell '
-                             'would be better.')
-    args = parser.parse_args()
-
+def main(args):
     if os.path.exists(args.model_path):
         p = os.path.split(args.model_path)[-1]
         src_dir = os.path.join(OPTIMISED_DIR, '_'.join([args.arch, p]))
@@ -287,8 +270,8 @@ if __name__ == '__main__':
 
     args.model_path = None if args.model_path == 'None' else args.model_path
     data_files = sorted(glob.glob(os.path.join(src_dir, '*.vasp')))
-    #print(data_files)
-    
+
+    # print(data_files)
     for file in data_files:
         name = os.path.split(file)[-1].replace('.vasp', '')
         work_dir = os.path.join(dest_dir, name)
@@ -296,8 +279,8 @@ if __name__ == '__main__':
 
         if not args.check_supercells:
             if has_symmetry_changed(src_dir, name) or is_calculation_complete(work_dir, name):
-               continue
-        
+                continue
+
         os.makedirs(work_dir, exist_ok=True)
         os.chdir(work_dir)
         try:
@@ -345,7 +328,8 @@ if __name__ == '__main__':
         try:
             result = subprocess.run(base_args + ['--device', 'cuda'], check=True)
         except subprocess.CalledProcessError:
-            print('cuda run failed; retrying using PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True')
+            print(
+                'cuda run failed; retrying using PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True')
             try:
                 env = os.environ.copy()
                 env['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
@@ -355,5 +339,25 @@ if __name__ == '__main__':
                 subprocess.run(base_args + ['--device', 'cpu'])
 
         os.chdir(HOME_DIR)
-
     print('FINISHED')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--cell', action='store_true',
+                        help='If provided, the cell parameters are optimised')
+    parser.add_argument('-r', '--restart', action='store_true', help='Recomputes completed calculations')
+    parser.add_argument('-a', '--arch', type=str, default='mace_mp',
+                        help='The "--arch" parameter for Janus.')
+    parser.add_argument('-mp', '--model-path', type=str, default='large',
+                        help='The "--model-path" parameter for Janus.')
+    parser.add_argument('-cs', '--check-supercells', action='store_true',
+                        help='Disregards everything and only print out the supercell target sizes.')
+    parser.add_argument('-rs', '--redo-supercells', action='store_true',
+                        help='Redoes the supercells')
+    parser.add_argument('-fs', '--force-symmetric', action='store_true',
+                        help='Forces all supercells to be symmetric, even if an asymmetric cell '
+                             'would be better.')
+    args = parser.parse_args()
+
+    main(args)
