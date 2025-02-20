@@ -220,7 +220,7 @@ def get_new_supercell(file: str,
     if cell is None:
         if force_symmetric:
             new_cell =  get_symmetric_supercell(file)
-            print(f'supercell = {cell} (changed from {cell})')
+            print(f'supercell = {new_cell} (changed from {cell})')
             np.save(supercell_path, np.array(new_cell.split()).astype(int))
 
             return new_cell
@@ -229,12 +229,17 @@ def get_new_supercell(file: str,
             return None
 
     cell_arr = np.array(cell.split()).astype(int)
+    try:
+        symmetric = is_symmetric(cell_arr.reshape((3, 3)))
+    except ValueError:
+        symmetric = True
 
-    if args.force_symmetric and not is_symmetric(cell_arr.reshape((3, 3))):
+
+    if args.force_symmetric and not symmetric:
         np.save(asymmetric_path, cell_arr)
         new_cell = get_symmetric_supercell(file)
 
-        print(f'supercell = {cell} (changed from {cell})')
+        print(f'supercell = {new_cell} (changed from {cell})')
         np.save(supercell_path, np.array(new_cell.split()).astype(int))
 
         return new_cell
