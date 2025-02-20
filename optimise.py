@@ -267,9 +267,10 @@ if __name__ == '__main__':
         optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_func, filter_kwargs,
                                               opt_kwargs, traj_kwargs, dispersion, fmax=args.fmax)
         energy = optimiser.struct.get_potential_energy()
-
+        final_force = np.linalg.norm(optimiser.struct.get_forces(), axis=1).max()
+ 
         sg_different = optimiser.struct.info['initial_spacegroup'] != optimiser.struct.info['final_spacegroup']
-        if sg_different:
+        if sg_different and final_force < args.fmax:
             print('Space group changed during optimisation -> retrying with fixed symmetry')
 
             atoms = read(file, format='vasp')
