@@ -174,6 +174,37 @@ def set_subdir(parent_dir: str, name: str) -> str:
     return sub_dir
 
 
+def did_spacegroup_change(optimiser):
+    return optimiser.struct.info['initial_spacegroup'] != optimiser.struct.info['final_spacegroup']
+
+
+def retry_with_constraints(opt, energy):
+    print('Space group changed during optimisation -> retrying with fixed symmetry')
+    atoms = read(file, format='vasp')
+
+    try:
+        atoms.set_constraint(FixSymmetry(atoms=atoms, adjust_positions=True, adjust_cell=args.cell))
+    except AttributeError:
+        return None
+
+    opt = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_func, filter_kwargs,
+                                    opt_kwargs, traj_kwargs, dispersion, fmax=args.fmax)
+    energy2 = opt.struct.get_potential_energy()
+
+    print(f'Original energy: {energy}; new energy: {energy2}')
+    energy = energy2
+    sg_different = did_spacegroup_change(opt)
+
+    if not sg_different:
+        title = 'spacegroup_conserved'
+    else:
+        print('Space group changed despite ASE constraint')
+        title = 'spacegroup_changed'
+        changed_despite_constraint.append(name)
+
+    return title, energy, sg_different, final_force
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cell', action='store_true', help='If provided, the cell parameters are optimised')
@@ -269,26 +300,11 @@ if __name__ == '__main__':
         energy = optimiser.struct.get_potential_energy()
         final_force = np.linalg.norm(optimiser.struct.get_forces(), axis=1).max()
  
-        sg_different = optimiser.struct.info['initial_spacegroup'] != optimiser.struct.info['final_spacegroup']
+        sg_different = did_spacegroup_change(optimiser)
         if sg_different and final_force < args.fmax:
-            print('Space group changed during optimisation -> retrying with fixed symmetry')
-
-            atoms = read(file, format='vasp')
-            atoms.set_constraint(FixSymmetry(atoms=atoms, adjust_positions=True, adjust_cell=args.cell))
-            optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_func, filter_kwargs,
-                                                  opt_kwargs, traj_kwargs, dispersion, fmax=args.fmax)
-
-            energy2 = optimiser.struct.get_potential_energy()
-            print(f'Original energy: {energy}; new energy: {energy2}')
-            energy = energy2
-
-            sg_different = optimiser.struct.info['initial_spacegroup'] != optimiser.struct.info['final_spacegroup']
-            if not sg_different:
-                title = 'spacegroup_conserved'
-            else:
-                print('Space group changed despite ASE constraint')
-                title = 'spacegroup_changed'
-                changed_despite_constraint.append(name)
+            result = retry_with_constraints(optimiser, energy)
+            if result is not None:
+                title, energy, sg_different, final_force = result
         else:
             print('space group not changed')
             title = 'spacegroup_conserved'
