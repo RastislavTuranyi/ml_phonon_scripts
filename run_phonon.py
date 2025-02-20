@@ -25,11 +25,15 @@ import glob
 import os
 import subprocess
 from shutil import copyfile, rmtree
+from typing import TYPE_CHECKING
 
 from ase.io import read, write
 from ase.build.supercells import find_optimal_cell_shape
 from ase.build import make_supercell
 import numpy as np
+
+if TYPE_CHECKING:
+    import ase
 
 
 HOME_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -137,6 +141,9 @@ def get_supercell(path: str, work_dir: str, multiplier: float = 1.) -> str | Non
     target_n = len(atoms.get_atomic_numbers()) * target_size * multiplier
     print(f'getting supercell: target={target_size} target n atom={target_n}')
 
+    if target_n == 0 or target_size == 0:
+        return get_basic_supercell(path, atoms)
+
     result = subprocess.run(['vibes', 'utils', 'make-supercell', 
                              geom_path, '-n', str(int(target_n))],
                             capture_output=True, encoding='utf8')
@@ -149,7 +156,7 @@ def get_supercell(path: str, work_dir: str, multiplier: float = 1.) -> str | Non
         if 'LinAlgError' in result.stderr:
             return get_supercell(path, work_dir, multiplier + 0.5)
         print(result.returncode, result.stdout, result.stderr)
-        raise Exception()
+        raise Exception('vibes failed for an unexpected reason')
 
     for line in result.stdout.split('\n'):
         if 'Largest Cutoff' in line:
@@ -178,6 +185,13 @@ def get_sc_supercell(cell: np.ndarray, target: int):
 
     ideal = np.dot(metric, np.linalg.inv(norm_cell))
     return np.array(np.around(ideal, 0), dtype=int)
+
+
+def get_basic_supercell(path: str, atoms: ase.Atoms | None) -> str:
+    if atoms is None:
+        atoms = read(path, format='vasp')
+    cell_lengths = atoms.cell.cellpar()[:3]
+    return ' '.join(['1' if length > 20 else '2' for length in cell_lengths])
 
 
 if __name__ == '__main__':
