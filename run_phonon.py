@@ -178,6 +178,19 @@ def get_supercell(path: str, work_dir: str, multiplier: float = 1.) -> str | Non
     return cell
 
 
+def get_symmetric_supercell(path: str) -> str:
+    atoms = read(path, format='vasp')
+    target_size = round(IDEAL_VOLUME / atoms.cell.volume)
+    if target_size == 0:
+        return get_basic_supercell(path, atoms)
+
+    cell = get_sc_supercell(np.asarray(atoms.cell), target_size)
+    if is_symmetric(cell):
+        return ' '.join(cell.flatten().astype(str))
+    else:
+        return get_basic_supercell(path, atoms)
+
+
 def get_sc_supercell(cell: np.ndarray, target: int):
     metric = np.eye(3)
     norm = (target * abs(np.linalg.det(cell)) / np.linalg.det(metric)) ** (-1 / 3)
@@ -194,6 +207,44 @@ def get_basic_supercell(path: str, atoms: ase.Atoms | None) -> str:
     return ' '.join(['1' if length > 20 else '2' for length in cell_lengths])
 
 
+def is_symmetric(matrix: np.ndarray) -> bool:
+    return np.allclose(matrix, matrix.T)
+
+
+def get_new_supercell(file: str,
+                      work_dir: str,
+                      supercell_path: str,
+                      asymmetric_path: str,
+                      force_symmetric: bool = False) -> str | None:
+    cell = get_supercell(file, work_dir)
+    if cell is None:
+        if force_symmetric:
+            new_cell =  get_symmetric_supercell(file)
+            print(f'supercell = {supercell} (changed from {cell})')
+            np.save(supercell_path, np.array(new_cell.split()).astype(int))
+
+            return new_cell
+        else:
+            print('supercell not found')
+            return None
+
+    cell_arr = np.array(cell.split()).astype(int)
+
+    if args.force_symmetric and not is_symmetric(cell_arr.reshape((3, 3))):
+        np.save(asymmetric_path, cell_arr)
+        new_cell = get_symmetric_supercell(file)
+
+        print(f'supercell = {supercell} (changed from {cell})')
+        np.save(supercell_path, np.array(new_cell.split()).astype(int))
+
+        return new_cell
+    else:
+        print(f'supercell = {supercell}')
+        np.save(supercell_path, cell_arr)
+
+        return cell
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cell', action='store_true',
@@ -207,6 +258,9 @@ if __name__ == '__main__':
                         help='Disregards everything and only print out the supercell target sizes.')
     parser.add_argument('-rs', '--redo-supercells', action='store_true',
                         help='Redoes the supercells')
+    parser.add_argument('-fs', '--force-symmetric', action='store_true',
+                        help='Forces all supercells to be symmetric, even if an asymmetric cell '
+                             'would be better.')
     args = parser.parse_args()
 
     if os.path.exists(args.model_path):
@@ -253,16 +307,25 @@ if __name__ == '__main__':
                 raise
 
         supercell_path = os.path.join(work_dir, 'supercell.npy')
+        asymmetric_path = os.path.join(work_dir, 'supercell_asymmetric.npy')
+
         if os.path.exists(supercell_path) and not args.redo_supercells:
-            supercell = np.load(supercell_path)
+            if not args.force_symmetric:
+                if os.path.exists(asymmetric_path):
+                    supercell = np.load(asymmetric_path)
+                else:
+                    supercell = np.load(supercell_path)
+            else:
+                supercell = np.load(supercell_path)
+                if not is_symmetric(supercell.reshape((3, 3))):
+                    supercell = get_symmetric_supercell(file)
+
+            supercell = ' '.join(supercell)
             print(f'supercell = {supercell}')
         else:
-            supercell = get_supercell(file, work_dir)
+            supercell = get_new_supercell(file, work_dir, asymmetric_path, args.force_symmetric)
             if supercell is None:
                 continue
-        
-            print(f'supercell = {supercell}')
-            np.save(supercell_path, np.array(supercell.split()).astype(int))
 
         if args.check_supercells:
             continue
