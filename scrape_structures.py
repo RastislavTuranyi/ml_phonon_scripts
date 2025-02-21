@@ -214,9 +214,14 @@ def scrape(redo_failed: bool = True):
             writer.writerow(new_csv[-1])
             print(line[0])
 
-            if line[3] or (line[6] and not redo_failed and line[6][:6] != 'script'):  # CIF file or reason for no file
+            if line[3]:  # CIF file or reason for no file
                 new_csv.append(line)
                 print('exists')
+                continue
+
+            if line[6] and (not redo_failed or line[6][:6] != 'script'):
+                new_csv.append(line)
+                print('previously failed')
                 continue
 
             if line[2]:
