@@ -144,7 +144,11 @@ def is_calculation_symmetric(work_dir: str,
 
     supercell = np.load(supercell_path)
     if len(supercell) == 3 or is_symmetric(supercell.reshape((3, 3))):
+        print(f'previous calculation was with a symmetric cell ({supercell})')
         return True
+
+    print(f'previous calculation was with asymmetric supercell ({supercell}) and redo has been '
+          f'requested')
 
     store_path = os.path.join(work_dir, 'supercell_asymmetric')
     os.mkdir(store_path)
@@ -213,7 +217,7 @@ def get_symmetric_supercell(path: str) -> str:
         return get_basic_supercell(path, atoms)
 
     cell = get_sc_supercell(np.asarray(atoms.cell), target_size)
-    if is_symmetric(cell):
+    if is_symmetric(cell) and not has_zero_rows(cell):
         return ' '.join(cell.flatten().astype(str))
     else:
         return get_basic_supercell(path, atoms)
@@ -239,6 +243,10 @@ def is_symmetric(matrix: np.ndarray) -> bool:
     return np.allclose(matrix, matrix.T)
 
 
+def has_zero_rows(matrix: np.ndarray) -> bool:
+    return np.any(np.sum(np.abs(matrix), axis=1) == 0)
+
+
 def get_new_supercell(file: str,
                       work_dir: str,
                       supercell_path: str,
@@ -261,7 +269,6 @@ def get_new_supercell(file: str,
         symmetric = is_symmetric(cell_arr.reshape((3, 3)))
     except ValueError:
         symmetric = True
-
 
     if args.force_symmetric and not symmetric:
         np.save(asymmetric_path, cell_arr)
