@@ -143,7 +143,7 @@ def is_calculation_symmetric(work_dir: str,
         return True
 
     supercell = np.load(supercell_path)
-    if is_symmetric(supercell.reshape((3, 3))):
+    if len(supercell) == 3 or is_symmetric(supercell.reshape((3, 3))):
         return True
 
     store_path = os.path.join(work_dir, 'supercell_asymmetric')
@@ -337,7 +337,7 @@ def main(args):
                     supercell = np.load(supercell_path)
             else:
                 supercell = np.load(supercell_path)
-                if not is_symmetric(supercell.reshape((3, 3))):
+                if len(supercell) == 3 or not is_symmetric(supercell.reshape((3, 3))):
                     supercell = get_symmetric_supercell(file)
 
             supercell = ' '.join(supercell)
