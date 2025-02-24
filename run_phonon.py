@@ -126,6 +126,34 @@ def is_calculation_complete(work_dir: str, name: str) -> bool:
     return False
 
 
+def is_calculation_symmetric(work_dir: str,
+                             supercell_path: str,
+                             fully_force_symmetric: bool = False) -> bool:
+    """
+    Checks whether the completed calculation has a symmetric supercell. If not, the existing files
+    are moved.
+
+    :param work_dir: The path to the directory containing the results for a given system
+    :param supercell_path: The path to the supercell npy file.
+    :param fully_force_symmetric: User-command saying whether to check for this at all.
+
+    :return: Whether the calculation had a symmetric supercell.
+    """
+    if not fully_force_symmetric:
+        return True
+
+    supercell = np.load(supercell_path)
+    if is_symmetric(supercell.reshape((3, 3))):
+        return True
+
+    store_path = os.path.join(work_dir, 'supercell_asymmetric')
+    os.mkdir(store_path)
+    for file in glob.glob(os.path.join(work_dir, '*')):
+        if os.path.isfile(file):
+            os.rename(file, os.path.join(store_path, os.path.split(file)[-1]))
+    return False
+
+
 def get_supercell(path: str, work_dir: str, multiplier: float = 1.) -> str | None:
     """
     Constructs a supercell to use for the phonon calculations with janus.
@@ -282,8 +310,15 @@ def main(args):
         work_dir = os.path.join(dest_dir, name)
         print(name)
 
+        supercell_path = os.path.join(work_dir, 'supercell.npy')
+        asymmetric_path = os.path.join(work_dir, 'supercell_asymmetric.npy')
+
         if not args.check_supercells:
-            if has_symmetry_changed(src_dir, name) or is_calculation_complete(work_dir, name):
+            if has_symmetry_changed(src_dir, name):
+                continue
+
+            if (is_calculation_complete(work_dir, name) and
+                    is_calculation_symmetric(work_dir, supercell_path, args.fully_force_symmetric)):
                 continue
 
         os.makedirs(work_dir, exist_ok=True)
@@ -293,9 +328,6 @@ def main(args):
         except FileExistsError:
             if not args.check_supercells:
                 raise
-
-        supercell_path = os.path.join(work_dir, 'supercell.npy')
-        asymmetric_path = os.path.join(work_dir, 'supercell_asymmetric.npy')
 
         if os.path.exists(supercell_path) and not args.redo_supercells:
             if not args.force_symmetric:
@@ -363,6 +395,9 @@ if __name__ == '__main__':
     parser.add_argument('-fs', '--force-symmetric', action='store_true',
                         help='Forces all supercells to be symmetric, even if an asymmetric cell '
                              'would be better.')
+    parser.add_argument('-ffs', '--fully-force-symmetric', action='store_true',
+                        help='Forces the runs that had previously been completed but with '
+                             'asymmetric supercells to be rerun with --force-symmetric.')
     args = parser.parse_args()
 
     main(args)
