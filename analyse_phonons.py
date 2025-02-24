@@ -17,6 +17,10 @@ RESULTS_DIR = os.path.join(HOME_DIR, 'results')
 GRID = mp_grid((5, 5, 5))
 IMAGINARY_MODE_TOLERANCE = 1e-3
 
+EXIT_SUCCESS = 0
+EXIT_NO_FILE = 123
+EXIT_RUNTIME_ERROR = 455
+
 
 def print_result(p, img, imgc, result, phonons_correction):
     print(f'{result}: {np.sum(img)} imaginary modes, {np.sum(imgc)} with correction')
@@ -69,10 +73,10 @@ def run_one(dir):
             print('euphonic failed - supercell=', supercell, ' det=',
                   np.linalg.det(supercell.reshape((3, 3))))
             print()
-            return False
+            exit(EXIT_RUNTIME_ERROR)
         except FileNotFoundError:
             print('No supercell\n')
-            return False
+            exit(EXIT_NO_FILE)
 
         phonons = force_constants.calculate_qpoint_phonon_modes(GRID).frequencies.magnitude
         phonons_correction = force_constants.calculate_qpoint_phonon_modes(GRID, asr='reciprocal')
@@ -118,7 +122,7 @@ def run_one(dir):
             pass
 
     print()
-    return True
+    exit(EXIT_SUCCESS)
 
 
 def main(args):
@@ -138,12 +142,16 @@ def main(args):
     failed_supercells = []
     successful_supercells = []
     for dir in directories:
-        result = run_one(dir)
+        process = Process(target=run_one, args=(dir,))
+        process.start()
+        process.join()
 
-        if result:
+        if process.exitcode == EXIT_SUCCESS:
             successful_supercells.append(np.load(os.path.join(dir, 'supercell.npy')))
-        else:
+        elif process.exitcode == EXIT_RUNTIME_ERROR:
             failed_supercells.append(np.load(os.path.join(dir, 'supercell.npy')))
+        elif process.exitcode != EXIT_NO_FILE:
+            print('unexpected failure - possible segfault')
 
     np.save(os.path.join(results_dir, 'failed_supercells.npy'), failed_supercells)
     np.save(os.path.join(results_dir, 'successful_supercells.npy'), successful_supercells)
