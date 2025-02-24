@@ -1,6 +1,7 @@
 import argparse
 from contextlib import redirect_stdout
 import glob
+from multiprocessing import Process
 import os
 
 import numpy as np
@@ -17,7 +18,7 @@ GRID = mp_grid((5, 5, 5))
 IMAGINARY_MODE_TOLERANCE = 1e-3
 
 
-def print_result(p, img, imgc, result):
+def print_result(p, img, imgc, result, phonons_correction):
     print(f'{result}: {np.sum(img)} imaginary modes, {np.sum(imgc)} with correction')
     print(f'og: {np.min(p, axis=0)[img]}')
     print(f'with correction: {np.min(phonons_correction, axis=0)[imgc]}')
@@ -39,6 +40,115 @@ def write_weird(name, path, p, img, pc, imgc):
             f.write(f'{GRID[pc[:, idx] < 0]}\n')
 
 
+def run_one(dir):
+    compound = os.path.split(os.path.split(dir)[0])[-1]
+    print(compound)
+
+    phonopy_file = os.path.join(dir, f'{compound}-phonopy')
+    try:
+        os.symlink(phonopy_file + '.yml', phonopy_file + '.yaml')
+    except FileExistsError:
+        pass
+
+    out = os.path.join(dir, f'{compound}_frequencies.npy')
+    out_correction = os.path.join(dir, f'{compound}_frequencies_corrected.npy')
+
+    if not args.recompute and os.path.exists(out) and os.path.exists(out_correction):
+        phonons = np.load(out)
+        phonons_correction = np.load(out_correction)
+    else:
+        try:
+            with redirect_stdout(None):
+                force_constants = ForceConstants.from_phonopy(
+                    path=dir,
+                    summary_name=f'{compound}-phonopy.yaml',
+                    fc_name=f'{compound}-force_constants.hdf5'
+                )
+        except RuntimeError:
+            supercell = np.load(os.path.join(dir, 'supercell.npy'))
+            print('euphonic failed - supercell=', supercell, ' det=',
+                  np.linalg.det(supercell.reshape((3, 3))))
+            print()
+            return False
+        except FileNotFoundError:
+            print('No supercell\n')
+            return False
+
+        phonons = force_constants.calculate_qpoint_phonon_modes(GRID).frequencies.magnitude
+        phonons_correction = force_constants.calculate_qpoint_phonon_modes(GRID, asr='reciprocal')
+
+        if args.plot:
+            plot_bands(phonons_correction, str(os.path.join(dir, f'{compound}_bands.png')))
+
+        phonons_correction = phonons_correction.frequencies.magnitude
+
+        np.save(out, phonons)
+        np.save(out_correction, phonons_correction)
+
+    imaginary = np.sum(phonons < 0, axis=0) > 0
+    imaginary_correction = np.sum(phonons_correction < 0, axis=0) > 0
+
+    ia = np.any(imaginary)
+    ica = np.any(imaginary_correction)
+
+    if ia and ica:
+        if np.all(np.abs(phonons_correction[phonons_correction < 0]) < args.tolerance):
+            print_result(phonons, imaginary, imaginary_correction, 'ACCEPTABLE', phonons_correction)
+            write_default('ACCEPTABLE', dir, phonons, imaginary, phonons_correction,
+                          imaginary_correction)
+        else:
+            print_result(phonons, imaginary, imaginary_correction, 'FAILED', phonons_correction)
+            write_default('FAILED', dir, phonons, imaginary, phonons_correction,
+                          imaginary_correction)
+    elif ica:
+        if np.all(np.abs(phonons_correction[phonons_correction < 0]) < args.tolerance):
+            print_result(phonons, imaginary, imaginary_correction, 'WEIRD-OK', phonons_correction)
+            write_weird('WEIRD-OK', dir, phonons, imaginary, phonons_correction,
+                        imaginary_correction)
+        else:
+            print_result(phonons, imaginary, imaginary_correction, 'WEIRD-FAIL', phonons_correction)
+            write_weird('WEIRD-FAIL', dir, phonons, imaginary, phonons_correction,
+                        imaginary_correction)
+    elif ia:
+        print_result(phonons, imaginary, imaginary_correction, 'OK', phonons_correction)
+        write_default('OK', dir, phonons, imaginary, phonons_correction, imaginary_correction)
+    else:
+        print(f'GREAT!!! {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
+        with open(os.path.join(dir, 'GREAT', 'w')) as f:
+            pass
+
+    print()
+    return True
+
+
+def main(args):
+    if os.path.exists(args.model_path):
+        p = os.path.split(args.model_path)[-1]
+        results_dir = os.path.join(RESULTS_DIR, '_'.join([args.arch, p]))
+    else:
+        results_dir = os.path.join(RESULTS_DIR, '_'.join([args.arch, args.model_path]))
+
+    if args.cell:
+        results_dir = os.path.join(results_dir, 'cell')
+    else:
+        results_dir = os.path.join(results_dir, 'no_cell')
+
+    directories = glob.glob(os.path.join(results_dir, '*', ''))
+
+    failed_supercells = []
+    successful_supercells = []
+    for dir in directories:
+        result = run_one(dir)
+
+        if result:
+            successful_supercells.append(np.load(os.path.join(dir, 'supercell.npy')))
+        else:
+            failed_supercells.append(np.load(os.path.join(dir, 'supercell.npy')))
+
+    np.save(os.path.join(results_dir, 'failed_supercells.npy'), failed_supercells)
+    np.save(os.path.join(results_dir, 'successful_supercells.npy'), successful_supercells)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cell', action='store_true',
@@ -55,98 +165,4 @@ if __name__ == '__main__':
                         help='The tolerance for imaginary modes')
     args = parser.parse_args()
 
-    if os.path.exists(args.model_path):
-        p = os.path.split(args.model_path)[-1]
-        results_dir = os.path.join(RESULTS_DIR, '_'.join([args.arch, p]))
-    else:
-        results_dir = os.path.join(RESULTS_DIR, '_'.join([args.arch, args.model_path]))
-
-    if args.cell:
-        results_dir = os.path.join(results_dir, 'cell')
-    else:
-        results_dir = os.path.join(results_dir, 'no_cell')
-
-    directories = glob.glob(os.path.join(results_dir, '*', ''))
-
-
-    failed_supercells = []
-    successful_supercells = []
-    for dir in directories:
-        compound = os.path.split(os.path.split(dir)[0])[-1]
-        print(compound)
-
-        phonopy_file = os.path.join(dir, f'{compound}-phonopy')
-        try:
-            os.symlink(phonopy_file + '.yml', phonopy_file + '.yaml')
-        except FileExistsError:
-            pass
-
-        out = os.path.join(dir, f'{compound}_frequencies.npy')
-        out_correction = os.path.join(dir, f'{compound}_frequencies_corrected.npy')
-
-        if not args.recompute and os.path.exists(out) and os.path.exists(out_correction):
-            phonons = np.load(out)
-            phonons_correction = np.load(out_correction)
-        else:
-            try:
-                with redirect_stdout(None):
-                    force_constants = ForceConstants.from_phonopy(
-                        path=dir,
-                        summary_name=f'{compound}-phonopy.yaml',
-                        fc_name=f'{compound}-force_constants.hdf5'
-                    )
-            except RuntimeError:
-                supercell = np.load(os.path.join(dir, 'supercell.npy'))
-                print('euphonic failed - supercell=', supercell, ' det=', np.linalg.det(supercell.reshape((3, 3))))
-                failed_supercells.append(supercell)
-                print()
-                continue
-            except FileNotFoundError:
-                print('No supercell\n')
-                continue
-
-            phonons = force_constants.calculate_qpoint_phonon_modes(GRID).frequencies.magnitude
-            phonons_correction = force_constants.calculate_qpoint_phonon_modes(GRID, asr='reciprocal')
-
-            if args.plot:
-                plot_bands(phonons_correction, str(os.path.join(dir, f'{compound}_bands.png')))
-
-            phonons_correction = phonons_correction.frequencies.magnitude
-
-            np.save(out, phonons)
-            np.save(out_correction, phonons_correction)
-
-        successful_supercells.append(np.load(os.path.join(dir, 'supercell.npy')))     
-
-        imaginary = np.sum(phonons < 0, axis=0) > 0
-        imaginary_correction = np.sum(phonons_correction < 0, axis=0) > 0
-
-        ia = np.any(imaginary)
-        ica = np.any(imaginary_correction)
-
-        if ia and ica:
-            if np.all(np.abs(phonons_correction[phonons_correction < 0]) < args.tolerance):
-                print_result(phonons, imaginary, imaginary_correction, 'ACCEPTABLE')
-                write_default('ACCEPTABLE', dir, phonons, imaginary, phonons_correction, imaginary_correction)
-            else:
-                print_result(phonons, imaginary, imaginary_correction, 'FAILED')
-                write_default('FAILED', dir, phonons, imaginary, phonons_correction, imaginary_correction)
-        elif ica:
-            if np.all(np.abs(phonons_correction[phonons_correction < 0]) < args.tolerance):
-                print_result(phonons, imaginary, imaginary_correction, 'WEIRD-OK')
-                write_weird('WEIRD-OK', dir, phonons, imaginary, phonons_correction, imaginary_correction)
-            else:
-                print_result(phonons, imaginary, imaginary_correction, 'WEIRD-FAIL')
-                write_weird('WEIRD-FAIL', dir, phonons, imaginary, phonons_correction, imaginary_correction)
-        elif ia:
-            print_result(phonons, imaginary, imaginary_correction, 'OK')
-            write_default('OK', dir, phonons, imaginary, phonons_correction, imaginary_correction)
-        else:
-            print(f'GREAT!!! {np.sum(imaginary)} imaginary modes, {np.sum(imaginary_correction)} with correction')
-            with open(os.path.join(dir, 'GREAT', 'w')) as f:
-                pass
-
-        print()
-
-    np.save(os.path.join(results_dir, 'failed_supercells.npy'), failed_supercells)
-    np.save(os.path.join(results_dir, 'successful_supercells.npy'), successful_supercells)
+    main(args)
