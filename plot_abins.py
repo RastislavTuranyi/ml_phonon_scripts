@@ -226,6 +226,9 @@ if __name__ == '__main__':
                         help='The "--model-path" parameter for Janus.')
     parser.add_argument('-rp', '--replot', action='store_true',
                         help='Disables skipping when the plot already exists.')
+    parser.add_argument('-ft', '--force-tosca', action='store_true',
+                        help='Forces the TOSCA resolution to be used for all compounds, regardless '
+                             'of which instrument they were measured on.')
     args = parser.parse_args()
 
     data = parse_csv_data()
@@ -261,7 +264,7 @@ if __name__ == '__main__':
             continue
 
         try:
-            if data[compound][''].lower() != 'tosca':
+            if not args.force_tosca and data[compound][''].lower() != 'tosca':
                 print(f'skipping {compound} due to not having TOSCA measurements')
                 continue
         except KeyError:
