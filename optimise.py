@@ -165,6 +165,7 @@ def run_geometry_optimisation(atoms: ase.Atoms,
     try:
         optimiser.run()
     except RuntimeError:
+        del optimiser
         optimiser = GeomOpt(struct=atoms,
                             arch=arch,
                             device='cpu',
@@ -179,6 +180,7 @@ def run_geometry_optimisation(atoms: ase.Atoms,
                             opt_kwargs=okwargs,
                             traj_kwargs=tkwargs,
                             track_carbon=False)
+        print(optimiser.device)
         optimiser.run()
 
     return optimiser
