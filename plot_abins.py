@@ -211,26 +211,7 @@ def split_parsed_data(data: list[list[float]]) -> list[list[float]]:
     return out
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-        description='Script for comparing computed INS spectra with experimental equivalents. '
-                    'Takes the phonopy force constants and runs them through AbINS to calculate '
-                    'the predicted INS spectrum. This is then plotted on the same plot as the '
-                    'experimental results.'
-    )
-    parser.add_argument('-c', '--cell', action='store_true',
-                        help='If provided, the cell parameters are optimised')
-    parser.add_argument('-a', '--arch', type=str, default='mace_mp',
-                        help='The "--arch" parameter for Janus.')
-    parser.add_argument('-mp', '--model-path', type=str, default='large',
-                        help='The "--model-path" parameter for Janus.')
-    parser.add_argument('-rp', '--replot', action='store_true',
-                        help='Disables skipping when the plot already exists.')
-    parser.add_argument('-ft', '--force-tosca', action='store_true',
-                        help='Forces the TOSCA resolution to be used for all compounds, regardless '
-                             'of which instrument they were measured on.')
-    args = parser.parse_args()
-
+def main(args):
     data = parse_csv_data()
 
     if os.path.exists(args.model_path):
@@ -252,13 +233,13 @@ if __name__ == '__main__':
         if not args.replot and os.path.exists(os.path.join(directory, f'{compound}.png')):
             print(f'Skipping {compound} because already complete')
             continue
-        
+
         print()
         if not (
-            os.path.exists(os.path.join(directory, 'ACCEPTABLE')) or
-            os.path.exists(os.path.join(directory, 'WEIRD-OK')) or
-            os.path.exists(os.path.join(directory, 'OK')) or
-            os.path.exists(os.path.join(directory, 'GREAT'))
+                os.path.exists(os.path.join(directory, 'ACCEPTABLE')) or
+                os.path.exists(os.path.join(directory, 'WEIRD-OK')) or
+                os.path.exists(os.path.join(directory, 'OK')) or
+                os.path.exists(os.path.join(directory, 'GREAT'))
         ):
             print(f'skipping {compound} because of imaginary modes')
             continue
@@ -279,26 +260,7 @@ if __name__ == '__main__':
 
         print(compound)
 
-        if os.path.exists(os.path.join(directory, f'abins.npy')):
-            result = np.load(os.path.join(directory, 'abins.npy'))
-            energy = result[0, :]
-            s = result[1, :]
-        else:
-            result = Abins(VibrationalOrPhononFile=os.path.join(directory, f'{compound}-phonopy.yaml'),
-                           AbInitioProgram='FORCECONSTANTS',
-                           Instrument='TOSCA',
-                           SumContributions=True,
-                           QuantumOrderEventsNumber='2',
-                           Autoconvolution=True,
-                           Setting='All detectors (TOSCA)',
-                           ScaleByCrossSection="Total")
-
-            energy = result[0].extractX().flatten()
-            energy = (energy[1:] + energy[:-1]) / 2
-            s = result[0].extractY().flatten()
-
-            np.save(os.path.join(directory, 'abins.npy'),
-                    np.stack([energy, s]))
+        energy, result, s = get_abins_data(compound, directory)
 
         ins_data = parse_data_file(os.path.join(INS_DIR, f'{compound}.dat'))
         try:
@@ -310,28 +272,7 @@ if __name__ == '__main__':
 
         energy, s, ins_data, y_max = normalise_data(energy, s, ins_data)
 
-        fig, ax = plt.subplots(dpi=2000)
-
-        ax.plot(ins_data[:, 0], ins_data[:, 1], label='Experimental', alpha=0.7, c='#1E5DF8', linewidth=2.5)
-        ax.plot(energy, s, label='AbINS', alpha=0.7, c='#E94D36', linewidth=2.5)
-
-        ax.set_xlabel('Energy transfer $(cm^{-1})$', fontsize=20)
-        ax.set_ylabel('S(q, w)', fontsize=20)
-
-        ax.set_xlim(0, 4000)
-        
-        if np.max(ins_data[:, 1]) > 3 * y_max:
-            y_min = min([np.min(s), np.min(ins_data[:, 1])])
-            ax.set_ylim(y_min*0.9, y_max*1.5)
-
-        ax.tick_params(length=5, width=2, labelsize=15)
-        ax.axes.get_yaxis().set_ticks([])
-
-        plt.legend(fontsize=15)
-
-        fig.tight_layout()
-        fig.savefig(os.path.join(directory, f'{compound}.png'))
-        plt.close(fig)
+        plot_abins(compound, directory, energy, ins_data, s, y_max)
 
         try:
             result.delete()
@@ -339,5 +280,79 @@ if __name__ == '__main__':
             pass
 
     created_hdf_files = glob.glob(os.path.join(HOME_DIR, '*.hdf5'))
-    for file in created_hdf_files: 
+    for file in created_hdf_files:
         os.remove(file)
+
+
+def get_abins_data(compound, directory):
+    if os.path.exists(os.path.join(directory, f'abins.npy')):
+        result = np.load(os.path.join(directory, 'abins.npy'))
+        energy = result[0, :]
+        s = result[1, :]
+    else:
+        result = Abins(
+            VibrationalOrPhononFile=os.path.join(directory, f'{compound}-phonopy.yaml'),
+            AbInitioProgram='FORCECONSTANTS',
+            Instrument='TOSCA',
+            SumContributions=True,
+            QuantumOrderEventsNumber='2',
+            Autoconvolution=True,
+            Setting='All detectors (TOSCA)',
+            ScaleByCrossSection="Total")
+
+        energy = result[0].extractX().flatten()
+        energy = (energy[1:] + energy[:-1]) / 2
+        s = result[0].extractY().flatten()
+
+        np.save(os.path.join(directory, 'abins.npy'),
+                np.stack([energy, s]))
+
+    return energy, result, s
+
+
+def plot_abins(compound, directory, energy, ins_data, s, y_max):
+    fig, ax = plt.subplots(dpi=2000)
+
+    ax.plot(ins_data[:, 0], ins_data[:, 1], label='Experimental', alpha=0.7, c='#1E5DF8',
+            linewidth=2.5)
+    ax.plot(energy, s, label='AbINS', alpha=0.7, c='#E94D36', linewidth=2.5)
+
+    ax.set_xlabel('Energy transfer $(cm^{-1})$', fontsize=20)
+    ax.set_ylabel('S(q, w)', fontsize=20)
+
+    ax.set_xlim(0, 4000)
+    if np.max(ins_data[:, 1]) > 3 * y_max:
+        y_min = min([np.min(s), np.min(ins_data[:, 1])])
+        ax.set_ylim(y_min * 0.9, y_max * 1.5)
+
+    ax.tick_params(length=5, width=2, labelsize=15)
+    ax.axes.get_yaxis().set_ticks([])
+
+    plt.legend(fontsize=15)
+
+    fig.tight_layout()
+    fig.savefig(os.path.join(directory, f'{compound}.png'))
+    plt.close(fig)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Script for comparing computed INS spectra with experimental equivalents. '
+                    'Takes the phonopy force constants and runs them through AbINS to calculate '
+                    'the predicted INS spectrum. This is then plotted on the same plot as the '
+                    'experimental results.'
+    )
+    parser.add_argument('-c', '--cell', action='store_true',
+                        help='If provided, the cell parameters are optimised')
+    parser.add_argument('-a', '--arch', type=str, default='mace_mp',
+                        help='The "--arch" parameter for Janus.')
+    parser.add_argument('-mp', '--model-path', type=str, default='large',
+                        help='The "--model-path" parameter for Janus.')
+    parser.add_argument('-rp', '--replot', action='store_true',
+                        help='Disables skipping when the plot already exists.')
+    parser.add_argument('-ft', '--force-tosca', action='store_true',
+                        help='Forces the TOSCA resolution to be used for all compounds, regardless '
+                             'of which instrument they were measured on.')
+    args = parser.parse_args()
+
+    main(args)
