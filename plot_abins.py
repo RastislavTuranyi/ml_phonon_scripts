@@ -15,6 +15,7 @@ Assumptions:
    :py:func:`parse_csv_data`.
 """
 import argparse
+from contextlib import redirect_stdout
 import csv
 import glob
 import os
@@ -288,7 +289,8 @@ def main(args):
             plot_abins(name[:-4], directory, energy, ins_data, s, y_max)
 
         try:
-            result.delete()
+            with redirect_stdout(None):
+                result.delete()
         except (NameError, AttributeError):
             pass
 
