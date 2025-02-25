@@ -144,6 +144,7 @@ def parse_data_file(path: str) -> np.ndarray:
     try:
         return np.array(data)
     except ValueError:
+        print('COULD NOT LOAD INS DATA')
         for val in data:
             print(val)
         raise
