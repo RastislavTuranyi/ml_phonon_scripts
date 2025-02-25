@@ -105,7 +105,7 @@ def parse_csv_data() -> dict[str, dict[str, str]]:
     return result
 
 
-def parse_data_file(path: str) -> list[list[float]]:
+def parse_data_file(path: str) -> np.ndarray:
     """
     Parses a data (ASCII) file from the ISIS INS database
     (http://wwwisis2.isis.rl.ac.uk/INSdatabase/Theindex.asp). The file is assumed to be an output
@@ -139,7 +139,13 @@ def parse_data_file(path: str) -> list[list[float]]:
                 print(line, delimiter, line.split(delimiter))
                 raise
 
-    return split_parsed_data(out)
+    data = split_parsed_data(out)
+    try:
+        return np.array(data)
+    except ValueError:
+        for val in data:
+            print(val)
+        raise
 
 
 def has_data_started(line: list[str]) -> bool:
@@ -211,6 +217,20 @@ def split_parsed_data(data: list[list[float]]) -> list[list[float]]:
     return out
 
 
+def subselect_items(data: dict, force_tosca: bool = False):
+    result = []
+    for deuteration, instrument in data.items():
+        if not deuteration or deuteration.isnumeric():
+            if force_tosca:
+                if instrument != '?':
+                    result.append((deuteration, instrument))
+            else:
+                if instrument.lower() == 'tosca':
+                    result.append((deuteration, instrument))
+
+    return result
+
+
 def main(args):
     data = parse_csv_data()
 
@@ -244,11 +264,8 @@ def main(args):
             print(f'skipping {compound} because of imaginary modes')
             continue
 
-        try:
-            if not args.force_tosca and data[compound][''].lower() != 'tosca':
-                print(f'skipping {compound} due to not having TOSCA measurements')
-                continue
-        except KeyError:
+        non_deuterated = subselect_items(data[compound], args.force_tosca)
+        if not non_deuterated:
             print(f'skipping {compound} due to not having TOSCA measurements')
             continue
 
@@ -262,17 +279,13 @@ def main(args):
 
         energy, result, s = get_abins_data(compound, directory)
 
-        ins_data = parse_data_file(os.path.join(INS_DIR, f'{compound}.dat'))
-        try:
-            ins_data = np.array(ins_data)
-        except ValueError:
-            for val in ins_data:
-                print(val)
-            raise
+        for deuteration, instrument in non_deuterated:
+            name = f'{compound}_{deuteration}.dat' if deuteration else f'{compound}.dat'
+            ins_data = parse_data_file(os.path.join(INS_DIR, name))
 
-        energy, s, ins_data, y_max = normalise_data(energy, s, ins_data)
+            energy, s, ins_data, y_max = normalise_data(energy, s, ins_data)
 
-        plot_abins(compound, directory, energy, ins_data, s, y_max)
+            plot_abins(name[:-4], directory, energy, ins_data, s, y_max)
 
         try:
             result.delete()
