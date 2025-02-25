@@ -162,7 +162,25 @@ def run_geometry_optimisation(atoms: ase.Atoms,
                         opt_kwargs=okwargs,
                         traj_kwargs=tkwargs,
                         track_carbon=False)
-    optimiser.run()
+    try:
+        optimiser.run()
+    except RuntimeError:
+        optimiser = GeomOpt(struct=atoms,
+                            arch=arch,
+                            device='cpu',
+                            model_path=model_path,
+                            calc_kwargs={'dispersion': dispersion},
+                            attach_logger=True,
+                            fmax=fmax,
+                            steps=MAX_STEPS,
+                            write_results=True,
+                            filter_func=filter_func,
+                            filter_kwargs=filter_kwargs,
+                            opt_kwargs=okwargs,
+                            traj_kwargs=tkwargs,
+                            track_carbon=False)
+        optimiser.run()
+
     return optimiser
 
 
