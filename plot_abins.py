@@ -83,6 +83,8 @@ def parse_csv_data() -> dict[str, dict[str, str]]:
             if not file_field:
                 continue
 
+            no_data_file = line[9] == 'data inaccessible'
+
             if ', ' in file_field:
                 for file in file_field.split(', '):
                     key = file.strip().replace('.cif', '')
@@ -92,7 +94,7 @@ def parse_csv_data() -> dict[str, dict[str, str]]:
                     except KeyError:
                         result[key] = {}
 
-                    result[key][deuteration] = line[1]
+                    result[key][deuteration] = (line[1], no_data_file)
             else:
                 key = file_field.strip().replace('.cif', '')
                 deuteration = line[2].lower()
@@ -101,7 +103,7 @@ def parse_csv_data() -> dict[str, dict[str, str]]:
                 except KeyError:
                     result[key] = {}
 
-                result[key][deuteration] = line[1]
+                result[key][deuteration] = (line[1], no_data_file)
 
     return result
 
@@ -243,7 +245,10 @@ def split_parsed_data(data: list[list[float]]) -> list[list[float]]:
 
 def subselect_items(data: dict, force_tosca: bool = False):
     result = []
-    for deuteration, instrument in data.items():
+    for deuteration, (instrument, no_data_file) in data.items():
+        if no_data_file:
+            continue
+
         if not deuteration or deuteration.isnumeric():
             if force_tosca:
                 if instrument != '?':
