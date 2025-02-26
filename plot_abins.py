@@ -115,9 +115,29 @@ def parse_data_file(path: str) -> np.ndarray:
     :param path: Path to the file to parse
     :return: The table of data from the file.
     """
+    try:
+        out = read_data_file(path)
+    except UnicodeDecodeError:
+        out = read_data_file(path, 'ansi')
+
+    data = split_parsed_data(out)
+    if not data:
+        print('INS DATA FILE EMPTY')
+        raise Exception('INS data file empty')
+
+    try:
+        return np.array(data)
+    except ValueError:
+        print('COULD NOT LOAD INS DATA')
+        for val in data:
+            print(val)
+        raise
+
+
+def read_data_file(path: str, encoding: str = 'utf8'):
     out = []
     delimiter = None
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding=encoding) as f:
         for line in f:
             values = line.strip().split()
             if len(values) > 1:
@@ -139,19 +159,7 @@ def parse_data_file(path: str) -> np.ndarray:
             except ValueError:
                 print(line, delimiter, line.split(delimiter))
                 raise
-
-    data = split_parsed_data(out)
-    if not data:
-        print('INS DATA FILE EMPTY')
-        raise Exception('INS data file empty')
-
-    try:
-        return np.array(data)
-    except ValueError:
-        print('COULD NOT LOAD INS DATA')
-        for val in data:
-            print(val)
-        raise
+    return out
 
 
 def has_data_started(line: list[str]) -> bool:
