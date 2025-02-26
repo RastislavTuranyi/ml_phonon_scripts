@@ -179,8 +179,8 @@ def create_one_db(data, arch, model_path, cell):
     results_dir, result_name = get_specific_dir(RESULTS_DIR, arch, model_path, cell)
     optimised_dir, _ = get_specific_dir(OPTIMISED_DIR, arch, model_path, cell)
 
-    result = ['compound', 'id', 'instrument', 'method', 'temperature', 'optimisation',
-              'supercell', 'imaginary_modes', 'subjective']
+    result = [['compound', 'id', 'instrument', 'method', 'temperature', 'optimisation',
+              'supercell', 'imaginary_modes', 'subjective']]
     for compound, value in data.items():
         for _, (instrument, method, temperature) in subselect_items(value):
             opt = get_optimisation(compound, optimised_dir)
