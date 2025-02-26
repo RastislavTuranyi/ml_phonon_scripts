@@ -149,6 +149,7 @@ def parse_data_file(path: str) -> np.ndarray:
 def read_data_file(path: str, encoding: str = 'utf8'):
     out = []
     delimiter = None
+    strikes = 0
     with open(path, 'r', encoding=encoding) as f:
         for line in f:
             values = line.strip().split()
@@ -166,12 +167,26 @@ def read_data_file(path: str, encoding: str = 'utf8'):
         out.append([float(val.strip()) for val in line.strip().split(delimiter)])
 
         for line in f:
+            split_line = line.split(delimiter)
             try:
-                out.append([float(val.strip()) for val in line.split(delimiter)])
+                out.append([float(val.strip()) for val in split_line])
             except ValueError:
-                print(line, delimiter, line.split(delimiter))
-                raise
+                if check_line(split_line) and strikes < 5:
+                    strikes += 1
+                else:
+                    print(line, delimiter, split_line)
+                    raise
     return out
+
+
+def check_line(line: list[str]) -> bool:
+    for val in line:
+        try:
+            float(val.strip())
+        except ValueError:
+            if any(map(lambda x: x != '-', val.strip())):
+                return False
+    return True
 
 
 def has_data_started(line: list[str]) -> bool:
