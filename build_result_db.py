@@ -193,6 +193,9 @@ def create_one_db(data, arch, model_path, cell):
         writer = csv.writer(f, delimiter=',')
         writer.writerows(result)
 
+    with open(os.path.join(RESULTS_DIR, result_name + '.csv.tag'), 'w') as f:
+        f.write(f'{arch}\n{model_path}\n{cell}\n')
+
 
 def get_optimisation(compound, optimised_dir):
     vasp = compound + '.vasp'
