@@ -118,7 +118,17 @@ def parse_data_file(path: str) -> np.ndarray:
     try:
         out = read_data_file(path)
     except UnicodeDecodeError:
-        out = read_data_file(path, 'ansi')
+        try:
+            out = read_data_file(path, 'ascii')
+        except UnicodeDecodeError:
+            for i in range(1250, 1259):
+                try:
+                    out = read_data_file(path, f'cp{i}')
+                    break
+                except UnicodeDecodeError:
+                    pass
+            else:
+                raise
 
     data = split_parsed_data(out)
     if not data:
