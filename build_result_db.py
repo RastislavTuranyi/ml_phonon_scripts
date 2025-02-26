@@ -69,8 +69,8 @@ def parse_csv_data() -> dict[str, dict[str, str]]:
             if not file_field or line[9] == 'data inaccessible':
                 continue
 
-            if ',' in file_field:
-                for file in file_field.split(','):
+            if ', ' in file_field:
+                for file in file_field.split(', '):
                     key = file.strip().replace('.cif', '')
                     deuteration = line[2].lower()
                     try:
@@ -116,8 +116,11 @@ def get_id(name: str) -> int | None:
     else:
         return None
 
-    return int(name[len(name)-i:])
-
+    try:
+        return int(name[len(name)-i:])
+    except ValueError:
+        print(name, i)
+        raise
 
 def get_analyse_result(path: str) -> str | None:
     possibilities = ['ACCEPTABLE', 'FAILED', 'WEIRD-OK', 'WEIRD-FAIL', 'OK', 'GREAT']
@@ -131,7 +134,7 @@ def get_analyse_result(path: str) -> str | None:
 
 def get_results(path: str):
     try:
-        supercell = ' '.join(np.load(os.path.join(path, 'supercell.npy')))
+        supercell = ' '.join(np.load(os.path.join(path, 'supercell.npy')).astype(str))
     except FileNotFoundError:
         return None, None
 
