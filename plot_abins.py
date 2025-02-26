@@ -83,8 +83,8 @@ def parse_csv_data() -> dict[str, dict[str, str]]:
             if not file_field:
                 continue
 
-            if ',' in file_field:
-                for file in file_field.split(','):
+            if ', ' in file_field:
+                for file in file_field.split(', '):
                     key = file.strip().replace('.cif', '')
                     deuteration = line[2].lower()
                     try:
