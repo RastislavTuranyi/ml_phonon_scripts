@@ -141,6 +141,10 @@ def parse_data_file(path: str) -> np.ndarray:
                 raise
 
     data = split_parsed_data(out)
+    if not data:
+        print('INS DATA FILE EMPTY')
+        raise Exception('INS data file empty')
+
     try:
         return np.array(data)
     except ValueError:
@@ -266,7 +270,13 @@ def main(args):
             print(f'skipping {compound} because of imaginary modes')
             continue
 
-        non_deuterated = subselect_items(data[compound], args.force_tosca)
+        try:
+            compound_data = data[compound]
+        except KeyError:
+            print(data)
+            raise
+
+        non_deuterated = subselect_items(compound_data, args.force_tosca)
         if not non_deuterated:
             print(f'skipping {compound} due to not having TOSCA measurements')
             continue
