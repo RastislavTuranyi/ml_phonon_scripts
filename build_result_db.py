@@ -4,7 +4,11 @@ import glob
 import os
 
 import numpy as np
-import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
+from scipy.stats import wasserstein_distance
+from scipy.signal import butter, filtfilt
+
+from plot_abins import parse_data_file
 
 
 HOME_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -180,14 +184,21 @@ def create_one_db(data, arch, model_path, cell):
     optimised_dir, _ = get_specific_dir(OPTIMISED_DIR, arch, model_path, cell)
 
     result = [['compound', 'id', 'instrument', 'method', 'temperature', 'optimisation',
-              'supercell', 'imaginary_modes', 'subjective']]
+              'supercell', 'imaginary_modes', 'score']]
     for compound, value in data.items():
-        for _, (instrument, method, temperature) in subselect_items(value):
+        compound_result_dir = os.path.join(results_dir, compound)
+        abins_data = np.load(os.path.join(compound_result_dir, 'abins.npy'))
+
+        for deuteration, (instrument, method, temperature) in subselect_items(value):
             opt = get_optimisation(compound, optimised_dir)
-            supercell, imaginary = get_results(os.path.join(results_dir, compound))
+            supercell, imaginary = get_results(compound_result_dir)
+
+            name = f'{compound}_{deuteration}.dat' if deuteration else f'{compound}.dat'
+            ins_data = parse_data_file(os.path.join(INS_DIR, name))
+            score = compare_abins_ins(abins_data, ins_data)
 
             result.append([compound, get_id(compound), instrument, method, temperature, opt,
-                           supercell, imaginary, None])
+                           supercell, imaginary, score])
 
     with open(os.path.join(RESULTS_DIR, result_name + '.csv'), 'w') as f:
         writer = csv.writer(f, delimiter=',')
@@ -208,6 +219,22 @@ def get_optimisation(compound, optimised_dir):
     else:
         opt = None
     return opt
+
+
+def compare_abins_ins(abins_data, ins_data):
+    ins_x, ins_y = ins_data[:, 0], ins_data[:, 1]
+    abins_x, abins_y = abins_data[0, :], abins_data[1, :]
+
+    ins_y_interpolated = interp1d(ins_x, ins_y, kind='cubic')(abins_x)
+    b, a = butter(2, 1e-3, btype='high')
+
+    ins_y_filtered = filtfilt(b, a, ins_y_interpolated)
+    abins_y_filtered = filtfilt(b, a, abins_y)
+
+    ins_y_filtered /= np.trapz(np.abs(ins_y_filtered), abins_x)
+    abins_y_filtered /= np.trapz(np.abs(abins_y_filtered), abins_x)
+
+    return wasserstein_distance(ins_y_filtered, abins_y_filtered) * (np.max(abins_x) - np.min(abins_x))
 
 
 if __name__ == '__main__':
