@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import csv
 import glob
@@ -157,13 +159,18 @@ def subselect_items(data: dict):
 
 
 def main(args):
-    data = parse_csv_data()
     if args.arch and args.model_path:
         if args.update:
             update_one_db(args.arch, args.model_path, args.cell)
         else:
+            data = parse_csv_data()
             create_one_db(data, args.arch, args.model_path, args.cell)
-        return
+    else:
+        create_multiple_db(args)
+
+def create_multiple_db(args):
+    if not args.update:
+        data = parse_csv_data()
 
     runs = glob.glob(os.path.join(OPTIMISED_DIR, '*', ''))
     for run in runs:
@@ -245,16 +252,10 @@ def compare_abins_ins(abins_data, ins_data):
     if ins_x[0] > abins_x[0]:
         keep_idx = abins_x >= ins_x[0]
         abins_x, abins_y = abins_x[keep_idx], abins_y[keep_idx]
-    #else:
-    #    keep_idx = ins_x >= abins_x[0]
-    #    ins_x, ins_y = ins_x[keep_idx], ins_y[keep_idx]
 
     if ins_x[-1] < abins_x[-1]:
         keep_idx = abins_x <= ins_x[-1]
         abins_x, abins_y = abins_x[keep_idx], abins_y[keep_idx]
-    #else:
-    #    keep_idx = ins_x <= abins_x[-1]
-    #    ins_x, ins_y = ins_x[keep_idx], ins_y[keep_idx]
 
     ins_y_interpolated = interp1d(ins_x, ins_y, kind='cubic')(abins_x)
     b, a = butter(2, 1e-3, btype='high')
@@ -277,20 +278,25 @@ def update_one_db(arch, model_path, cell):
     data = []
     with open(os.path.join(RESULTS_DIR, result_name + '.csv'), 'r') as f:
         reader = csv.reader(f, delimiter=',')
+        data.append(next(reader))
         for line in reader:
             query = TextNumericSearch()
             query.add_ccdc_number(int(line[1]))
             result = query.search()
 
             if result:
-                result = result[0]
+                result = result[0].entry
                 line[9] = 'organometallic' if result.is_organometallic else 'organic'
                 line[10] = result.is_organic
                 line[11] = False
                 line[12] = result.is_organometallic
             else:
-                with open(os.path.join(DATA_DIR, line[0] + '.cif'), 'r') as cif:
-                    result = Entry.from_string(''.join(cif.readlines()))
+                try:
+                    with open(os.path.join(DATA_DIR, line[0] + '.cif'), 'r') as cif:
+                        result = Entry.from_string(''.join(cif.readlines()))
+                except FileNotFoundError:
+                    with open(os.path.join(HOME_DIR, 'difficult', line[0] + '.cif'), 'r') as cif:
+                        result = Entry.from_string(''.join(cif.readlines()))
 
                 line[9] = 'organometallic' if result.is_organometallic else 'inorganic'
                 line[10] = False
