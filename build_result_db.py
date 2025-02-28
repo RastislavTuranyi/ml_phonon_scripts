@@ -73,6 +73,9 @@ def parse_csv_data() -> dict[str, dict[str, str]]:
             if not file_field or line[9] == 'data inaccessible':
                 continue
 
+            line[4] = line[4] if line[4] else '?'
+            line[5] = line[5] if line[5] else '?'
+
             if ', ' in file_field:
                 for file in file_field.split(', '):
                     key = file.strip().replace('.cif', '')
@@ -156,7 +159,10 @@ def subselect_items(data: dict):
 def main(args):
     data = parse_csv_data()
     if args.arch and args.model_path:
-        create_one_db(data, args.arch, args.model_path, args.cell)
+        if args.update:
+            update_one_db(args.arch, args.model_path, args.cell)
+        else:
+            create_one_db(data, args.arch, args.model_path, args.cell)
         return
 
     runs = glob.glob(os.path.join(OPTIMISED_DIR, '*', ''))
@@ -176,7 +182,10 @@ def main(args):
         cell_runs = glob.glob(os.path.join(run, '*', ''))
         for cell_run in cell_runs:
             cell = os.path.split(cell_run)[-1]
-            create_one_db(data, arch, model_path, cell)
+            if args.update:
+                update_one_db(arch, model_path, cell)
+            else:
+                create_one_db(data, arch, model_path, cell)
 
 
 def create_one_db(data, arch, model_path, cell):
@@ -184,7 +193,9 @@ def create_one_db(data, arch, model_path, cell):
     optimised_dir, _ = get_specific_dir(OPTIMISED_DIR, arch, model_path, cell)
 
     result = [['compound', 'id', 'instrument', 'method', 'temperature', 'optimisation',
-              'supercell', 'imaginary_modes', 'score']]
+              'supercell', 'imaginary_modes', 'score', 'which', 'is_organic', 'is_inorganic',
+               'is_organometallic', 'is_polymeric', 'formula', 'n_rings',
+               'n_aromatic_rings', 'n_fused_rings']]
     for compound, value in data.items():
         compound_result_dir = os.path.join(results_dir, compound)
         abins_data = np.load(os.path.join(compound_result_dir, 'abins.npy'))
@@ -197,8 +208,8 @@ def create_one_db(data, arch, model_path, cell):
             ins_data = parse_data_file(os.path.join(INS_DIR, name))
             score = compare_abins_ins(abins_data, ins_data)
 
-            result.append([compound, get_id(compound), instrument, method, temperature, opt,
-                           supercell, imaginary, score])
+            result.append([compound, get_id(compound), instrument, method.lower(), temperature, opt,
+                           supercell, imaginary, score] + [None] * 9)
 
     with open(os.path.join(RESULTS_DIR, result_name + '.csv'), 'w') as f:
         writer = csv.writer(f, delimiter=',')
@@ -237,6 +248,48 @@ def compare_abins_ins(abins_data, ins_data):
     return wasserstein_distance(ins_y_filtered, abins_y_filtered) * (np.max(abins_x) - np.min(abins_x))
 
 
+def update_one_db(arch, model_path, cell):
+    from ccdc.search import TextNumericSearch
+    from ccdc.entry import Entry
+
+    results_dir, result_name = get_specific_dir(RESULTS_DIR, arch, model_path, cell)
+
+    data = []
+    with open(os.path.join(RESULTS_DIR, result_name + '.csv'), 'r') as f:
+        reader = csv.reader(f, delimiter=',')
+        for line in reader:
+            query = TextNumericSearch()
+            query.add_ccdc_number(int(line[1]))
+            result = query.search()
+
+            if result:
+                result = result[0]
+                line[9] = 'organometallic' if result.is_organometallic else 'organic'
+                line[10] = result.is_organic
+                line[11] = False
+                line[12] = result.is_organometallic
+            else:
+                with open(os.path.join(DATA_DIR, line[0] + '.cif'), 'r') as cif:
+                    result = Entry.from_string(''.join(cif.readlines()))
+
+                line[9] = 'organometallic' if result.is_organometallic else 'inorganic'
+                line[10] = False
+                line[11] = True
+                line[12] = result.is_organometallic
+
+            line[13] = result.is_polymeric
+            line[14] = result.molecule.formula
+            line[15] = len(result.molecule.rings)
+            line[16] = len([ring for ring in result.molecule.rings if ring.is_aromatic])
+            line[17] = len([ring for ring in result.molecule.rings if ring.is_fused])
+
+            data.append(line)
+
+    with open(os.path.join(RESULTS_DIR, result_name + '.csv'), 'w') as f:
+        writer = csv.writer(f, delimiter=',')
+        writer.writerows(data)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Script for comparing computed INS spectra with experimental equivalents. '
@@ -250,6 +303,8 @@ if __name__ == '__main__':
                         help='The "--arch" parameter for Janus.')
     parser.add_argument('-mp', '--model-path', type=str, default='',
                         help='The "--model-path" parameter for Janus.')
+    parser.add_argument('-u', '--update', action='store_true',
+                        help='Updates the csv file(s) with data from CSD (requires CSD Python API)')
     args = parser.parse_args()
 
     main(args)
