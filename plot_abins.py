@@ -23,7 +23,11 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-from mantid.simpleapi import Abins
+try:
+    from mantid.simpleapi import Abins
+except ImportError:
+    if __name__ == '__main__':
+        raise
 
 HOME_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(HOME_DIR, 'results')

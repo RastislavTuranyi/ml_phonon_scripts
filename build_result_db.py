@@ -198,15 +198,21 @@ def create_one_db(data, arch, model_path, cell):
                'n_aromatic_rings', 'n_fused_rings']]
     for compound, value in data.items():
         compound_result_dir = os.path.join(results_dir, compound)
-        abins_data = np.load(os.path.join(compound_result_dir, 'abins.npy'))
+        try:
+            abins_data = np.load(os.path.join(compound_result_dir, 'abins.npy'))
+        except FileNotFoundError:
+            abins_data = None
 
         for deuteration, (instrument, method, temperature) in subselect_items(value):
             opt = get_optimisation(compound, optimised_dir)
             supercell, imaginary = get_results(compound_result_dir)
 
-            name = f'{compound}_{deuteration}.dat' if deuteration else f'{compound}.dat'
-            ins_data = parse_data_file(os.path.join(INS_DIR, name))
-            score = compare_abins_ins(abins_data, ins_data)
+            if abins_data is None:
+                score = None
+            else:
+                name = f'{compound}_{deuteration}.dat' if deuteration else f'{compound}.dat'
+                ins_data = parse_data_file(os.path.join(INS_DIR, name))
+                score = compare_abins_ins(abins_data, ins_data)
 
             result.append([compound, get_id(compound), instrument, method.lower(), temperature, opt,
                            supercell, imaginary, score] + [None] * 9)
@@ -235,6 +241,20 @@ def get_optimisation(compound, optimised_dir):
 def compare_abins_ins(abins_data, ins_data):
     ins_x, ins_y = ins_data[:, 0], ins_data[:, 1]
     abins_x, abins_y = abins_data[0, :], abins_data[1, :]
+
+    if ins_x[0] > abins_x[0]:
+        keep_idx = abins_x >= ins_x[0]
+        abins_x, abins_y = abins_x[keep_idx], abins_y[keep_idx]
+    #else:
+    #    keep_idx = ins_x >= abins_x[0]
+    #    ins_x, ins_y = ins_x[keep_idx], ins_y[keep_idx]
+
+    if ins_x[-1] < abins_x[-1]:
+        keep_idx = abins_x <= ins_x[-1]
+        abins_x, abins_y = abins_x[keep_idx], abins_y[keep_idx]
+    #else:
+    #    keep_idx = ins_x <= abins_x[-1]
+    #    ins_x, ins_y = ins_x[keep_idx], ins_y[keep_idx]
 
     ins_y_interpolated = interp1d(ins_x, ins_y, kind='cubic')(abins_x)
     b, a = butter(2, 1e-3, btype='high')
