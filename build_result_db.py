@@ -87,7 +87,7 @@ def parse_csv_data() -> dict[str, dict[str, str]]:
                     except KeyError:
                         result[key] = {}
 
-                    result[key][deuteration] = (line[1], line[4], line[5])
+                    result[key][deuteration] = (line[1], line[4], line[5], line[12])
             else:
                 key = file_field.strip().replace('.cif', '')
                 deuteration = line[2].lower()
@@ -96,7 +96,7 @@ def parse_csv_data() -> dict[str, dict[str, str]]:
                 except KeyError:
                     result[key] = {}
 
-                result[key][deuteration] = (line[1], line[4], line[5])
+                result[key][deuteration] = (line[1], line[4], line[5], line[12])
 
     return result
 
@@ -210,7 +210,7 @@ def create_one_db(data, arch, model_path, cell):
         except FileNotFoundError:
             abins_data = None
 
-        for deuteration, (instrument, method, temperature) in subselect_items(value):
+        for deuteration, (instrument, method, temperature, id) in subselect_items(value):
             opt = get_optimisation(compound, optimised_dir)
             supercell, imaginary = get_results(compound_result_dir)
 
@@ -221,7 +221,10 @@ def create_one_db(data, arch, model_path, cell):
                 ins_data = parse_data_file(os.path.join(INS_DIR, name))
                 score = compare_abins_ins(abins_data, ins_data)
 
-            result.append([compound, get_id(compound), instrument, method.lower(), temperature, opt,
+            if not id:
+                id = get_id(compound)
+
+            result.append([compound, id, instrument, method.lower(), temperature, opt,
                            supercell, imaginary, score] + [None] * 9)
 
     with open(os.path.join(RESULTS_DIR, result_name + '.csv'), 'w') as f:
@@ -280,6 +283,8 @@ def update_one_db(arch, model_path, cell):
         reader = csv.reader(f, delimiter=',')
         data.append(next(reader))
         for line in reader:
+            if not line:
+                continue
             query = TextNumericSearch()
             query.add_ccdc_number(int(line[1]))
             result = query.search()
