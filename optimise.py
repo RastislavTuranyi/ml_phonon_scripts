@@ -99,6 +99,7 @@ def check_cif2cell_vesta(save_dir: str, top_dir: str, arch: str, model_path: str
         print(cif2cell_name)
         if not os.path.exists(cif2cell_file):
             print('Skipping because equivalent cif2cell file does not exist (might have previously been moved)')
+            os.rename(vesta_file, os.path.join(top_dir, cif2cell_name + '.vasp'))
             continue
 
         vesta_name = os.path.split(vesta_file)[-1].replace('.vasp', '')
@@ -120,6 +121,7 @@ def check_cif2cell_vesta(save_dir: str, top_dir: str, arch: str, model_path: str
         if cif2cell_energy > vesta_energy:
             print('VESTA file lower in energy')
             os.rename(cif2cell_file, os.path.join(duplicates_dir, cif2cell_name + '.vasp'))
+            os.rename(vesta_file, os.path.join(top_dir, cif2cell_name + '.vasp'))
         else:
             os.rename(vesta_file, os.path.join(duplicates_dir, vesta_name + '.vasp'))
             print('cif2cell file lower in energy')
