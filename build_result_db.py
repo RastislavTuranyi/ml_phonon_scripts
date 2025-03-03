@@ -174,8 +174,9 @@ def create_multiple_db(args):
 
     runs = glob.glob(os.path.join(OPTIMISED_DIR, '*', ''))
     for run in runs:
-        name = os.path.split(run)[-1]
+        name = os.path.split(os.path.dirname(run))[-1]
         if 'old' in name or 'fmax' in name:
+            print(f'skipping {name}')
             continue
 
         for arch in KNOWN_MODELS:
@@ -188,7 +189,8 @@ def create_multiple_db(args):
         model_path = name.replace(arch, '')[1:]
         cell_runs = glob.glob(os.path.join(run, '*', ''))
         for cell_run in cell_runs:
-            cell = os.path.split(cell_run)[-1]
+            cell = os.path.split(os.path.dirname(cell_run))[-1]
+            print(f'{name}_{cell}')
             if args.update:
                 update_one_db(arch, model_path, cell)
             else:
