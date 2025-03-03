@@ -198,7 +198,8 @@ def did_spacegroup_change(optimiser):
     return optimiser.struct.info['initial_spacegroup'] != optimiser.struct.info['final_spacegroup']
 
 
-def retry_with_constraints(opt, energy):
+def retry_with_constraints(file, filter_func, filter_kwargs, opt_kwargs, traj_kwargs, dispersion,
+                           energy, name, changed_despite_constraint):
     print('Space group changed during optimisation -> retrying with fixed symmetry')
     atoms = read(file, format='vasp')
 
@@ -213,8 +214,9 @@ def retry_with_constraints(opt, energy):
 
     print(f'Original energy: {energy}; new energy: {energy2}')
     energy = energy2
-    sg_different = did_spacegroup_change(opt)
+    final_force = np.linalg.norm(opt.struct.get_forces(), axis=1).max()
 
+    sg_different = did_spacegroup_change(opt)
     if not sg_different:
         title = 'spacegroup_conserved'
     else:
@@ -225,46 +227,12 @@ def retry_with_constraints(opt, energy):
     return title, energy, sg_different, final_force
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--cell', action='store_true', help='If provided, the cell parameters are optimised')
-    parser.add_argument('-r', '--restart', action='store_true', help='Recomputes completed calculations')
-    parser.add_argument('-a', '--arch', type=str, default='mace_mp',
-                        help='The "--arch" parameter for Janus.')
-    parser.add_argument('-mp', '--model-path', type=str, default='large',
-                        help='The "--model-path" parameter for Janus.')
-    parser.add_argument('-sf', '--skip-failed', action='store_true',
-                        help='Causes previously known failed calculations (due to either symmetry having changed or '
-                             'because it did not converge) to be skipped instead of recomputing.')
-    parser.add_argument('-dd', '--disable-dispersion', action='store_true', help='Disables dispersion')
-    parser.add_argument('-f', '--fmax', type=float, default=FMAX, 
-                        help=f'The FMAX to use for optimisation ({FMAX} by default)')
-    args = parser.parse_args()
-
-    dispersion = not args.disable_dispersion
-    filter_func = DEFAULT_FILTER_FUNC if args.cell else None
-    filter_kwargs = {'hydrostatic_strain': args.cell}
-
-    if os.path.exists(args.model_path):
-        p = os.path.split(args.model_path)[-1]
-        target_dir = os.path.join(TARGET_DIR, '_'.join([args.arch, p]))
-    else:
-        target_dir = os.path.join(TARGET_DIR, '_'.join([args.arch, args.model_path]))
-
-    args.model_path = None if args.model_path == 'None' else args.model_path
-
-    target_dir = os.path.join(target_dir, 'cell') if args.cell else os.path.join(target_dir, 'no_cell')
-
-    if args.restart:
-        rmtree(target_dir)
-        os.makedirs(target_dir)
-    
+def optimise(target_dir, filter_func, filter_kwargs, dispersion):
     extra_dir = set_subdir(target_dir, 'extra_data')
     not_converged_dir = set_subdir(target_dir, 'not_converged')
     sg_changed_dir = set_subdir(target_dir, 'spacegroup_changed')
 
     files = sorted(glob.glob(os.path.join(SOURCE_DIR, '*.vasp')))
-
     not_converged, changed_despite_constraint = [], []
     for file in files:
         name = os.path.split(file)[-1]
@@ -280,8 +248,10 @@ if __name__ == '__main__':
 
             if os.path.exists(os.path.join(out_dir, 'spacegroup_changed')):
                 print('Recomputing data because space group in the original was changed')
-                final_force, sg_same = recompute_changed(out_path, out_dir, name, file, args.cell, args.arch,
-                                                         args.model_path, filter_func, filter_kwargs, opt_kwargs, traj_kwargs,
+                final_force, sg_same = recompute_changed(out_path, out_dir, name, file, args.cell,
+                                                         args.arch,
+                                                         args.model_path, filter_func,
+                                                         filter_kwargs, opt_kwargs, traj_kwargs,
                                                          dispersion, fmax=args.fmax)
                 if final_force > args.fmax:
                     print('WARNING: Constrained optimisation did not converge')
@@ -296,7 +266,8 @@ if __name__ == '__main__':
             continue
         elif os.path.exists(out_dir):
             if os.path.exists(os.path.join(target_dir, 'high_energy_structures', name)):
-                print('Skipping because the structure is already complete and has been placed to high_energy_structures')
+                print(
+                    'Skipping because the structure is already complete and has been placed to high_energy_structures')
                 continue
             elif (os.path.exists(os.path.join(not_converged_dir, name)) or
                   os.path.exists(os.path.join(sg_changed_dir, name))):
@@ -315,20 +286,22 @@ if __name__ == '__main__':
         os.chdir(out_dir)
 
         atoms = read(file, format='vasp')
-        optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_func, filter_kwargs,
+        optimiser = run_geometry_optimisation(atoms, args.arch, args.model_path, filter_func,
+                                              filter_kwargs,
                                               opt_kwargs, traj_kwargs, dispersion, fmax=args.fmax)
         energy = optimiser.struct.get_potential_energy()
         final_force = np.linalg.norm(optimiser.struct.get_forces(), axis=1).max()
- 
+
         sg_different = did_spacegroup_change(optimiser)
         if sg_different and final_force < args.fmax:
-            result = retry_with_constraints(optimiser, energy)
+            result = retry_with_constraints(optimiser, filter_func, filter_kwargs, opt_kwargs,
+                                            traj_kwargs, dispersion, energy, name, changed_despite_constraint)
             if result is not None:
                 title, energy, sg_different, final_force = result
         else:
             print('space group not changed')
             title = 'spacegroup_conserved'
-        
+
         final_force = np.linalg.norm(optimiser.struct.get_forces(), axis=1).max()
         np.save(os.path.join(out_dir, 'final.npy'), np.array([energy / len(atoms), final_force]))
 
@@ -347,14 +320,59 @@ if __name__ == '__main__':
 
         try:
             with open(os.path.join(out_dir, title), 'w') as f:
-                f.write(optimiser.struct.info['initial_spacegroup'] + '   ' + optimiser.struct.info['final_spacegroup'])
+                f.write(optimiser.struct.info['initial_spacegroup'] + '   ' + optimiser.struct.info[
+                    'final_spacegroup'])
         except TypeError:
             if final_force < args.fmax:
                 raise
 
         os.chdir(DATA_DIR)
 
+    return not_converged, changed_despite_constraint
+
+
+def main(args):
+    dispersion = not args.disable_dispersion
+    filter_func = DEFAULT_FILTER_FUNC if args.cell else None
+    filter_kwargs = {'hydrostatic_strain': args.cell}
+
+    if os.path.exists(args.model_path):
+        p = os.path.split(args.model_path)[-1]
+        target_dir = os.path.join(TARGET_DIR, '_'.join([args.arch, p]))
+    else:
+        target_dir = os.path.join(TARGET_DIR, '_'.join([args.arch, args.model_path]))
+
+    args.model_path = None if args.model_path == 'None' else args.model_path
+    target_dir = os.path.join(target_dir, 'cell') if args.cell else os.path.join(target_dir, 'no_cell')
+
+    if args.restart:
+        rmtree(target_dir)
+        os.makedirs(target_dir)
+
+    not_converged, changed_despite_constraint = optimise(target_dir, filter_func, filter_kwargs, dispersion)
+
     check_cif2cell_vesta(target_dir, target_dir, args.arch, args.model_path, dispersion)
+
+    return not_converged, changed_despite_constraint
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--cell', action='store_true', help='If provided, the cell parameters are optimised')
+    parser.add_argument('-r', '--restart', action='store_true', help='Recomputes completed calculations')
+    parser.add_argument('-a', '--arch', type=str, default='mace_mp',
+                        help='The "--arch" parameter for Janus.')
+    parser.add_argument('-mp', '--model-path', type=str, default='large',
+                        help='The "--model-path" parameter for Janus.')
+    parser.add_argument('-sf', '--skip-failed', action='store_true',
+                        help='Causes previously known failed calculations (due to either symmetry having changed or '
+                             'because it did not converge) to be skipped instead of recomputing.')
+    parser.add_argument('-dd', '--disable-dispersion', action='store_true', help='Disables dispersion')
+    parser.add_argument('-f', '--fmax', type=float, default=FMAX, 
+                        help=f'The FMAX to use for optimisation ({FMAX} by default)')
+    args = parser.parse_args()
+
+    not_converged, changed_despite_constraint = main(args)
 
     print(f'Following systems did not converge: {not_converged}')
     print(f'Following systems changed despite using ase constraint: {changed_despite_constraint}')
