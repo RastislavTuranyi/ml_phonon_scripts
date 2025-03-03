@@ -329,6 +329,12 @@ def main(args):
         except FileExistsError:
             pass
 
+        try:
+            os.symlink(os.path.join(directory, f'{compound}-phonopy.yml'),
+                       os.path.join(directory, f'{compound}-phonopy.yaml'))
+        except FileExistsError:
+            pass
+
         print(compound)
 
         energy, result, s = get_abins_data(compound, directory)
