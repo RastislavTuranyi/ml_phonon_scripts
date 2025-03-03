@@ -92,6 +92,7 @@ def check_cif2cell_vesta(save_dir: str, top_dir: str, arch: str, model_path: str
     if not os.path.exists(duplicates_dir):
         os.makedirs(duplicates_dir)
 
+    cif2cell_better, vesta_better = [], []
     for vesta_file in vesta_files:
         cif2cell_file = vesta_file.replace('_vesta.vasp', '.vasp')
         cif2cell_name = os.path.split(cif2cell_file)[-1].replace('.vasp', '')
@@ -122,9 +123,14 @@ def check_cif2cell_vesta(save_dir: str, top_dir: str, arch: str, model_path: str
             print('VESTA file lower in energy')
             os.rename(cif2cell_file, os.path.join(duplicates_dir, cif2cell_name + '.vasp'))
             os.rename(vesta_file, os.path.join(top_dir, cif2cell_name + '.vasp'))
+            vesta_better.append(vesta_name)
         else:
             os.rename(vesta_file, os.path.join(duplicates_dir, vesta_name + '.vasp'))
             print('cif2cell file lower in energy')
+            cif2cell_better.append(cif2cell_name)
+
+    print(f'Lower energy VESTA files: {vesta_better}')
+    print(f'Lower energy cif2cell files: {cif2cell_better}')
 
 
 def compute_one_energy(file_path: str, arch: str, model_path: str, dispersion: bool = True) -> float:
@@ -330,7 +336,8 @@ def optimise(target_dir, filter_func, filter_kwargs, dispersion):
 
         os.chdir(DATA_DIR)
 
-    return not_converged, changed_despite_constraint
+    print(f'Following systems did not converge: {not_converged}')
+    print(f'Following systems changed despite using ase constraint: {changed_despite_constraint}')
 
 
 def main(args):
@@ -352,14 +359,9 @@ def main(args):
         os.makedirs(target_dir)
 
     if not args.no_optimisation:
-        not_converged, changed_despite_constraint = optimise(target_dir, filter_func, filter_kwargs, dispersion)
+        optimise(target_dir, filter_func, filter_kwargs, dispersion)
 
     check_cif2cell_vesta(target_dir, target_dir, args.arch, args.model_path, dispersion)
-
-    try:
-        return not_converged, changed_despite_constraint
-    except NameError:
-        return [], []
 
 
 if __name__ == '__main__':
@@ -380,8 +382,6 @@ if __name__ == '__main__':
                         help='Disables optimisation and causes only the cif2cell vs VESTA check to be performed.')
     args = parser.parse_args()
 
-    not_converged, changed_despite_constraint = main(args)
+    main(args)
 
-    print(f'Following systems did not converge: {not_converged}')
-    print(f'Following systems changed despite using ase constraint: {changed_despite_constraint}')
     print('FINISHED')
