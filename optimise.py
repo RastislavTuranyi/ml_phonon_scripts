@@ -354,6 +354,8 @@ if __name__ == '__main__':
 
         os.chdir(DATA_DIR)
 
+    check_cif2cell_vesta(target_dir, target_dir, args.arch, args.model_path, dispersion)
+
     print(f'Following systems did not converge: {not_converged}')
     print(f'Following systems changed despite using ase constraint: {changed_despite_constraint}')
     print('FINISHED')
