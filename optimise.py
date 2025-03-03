@@ -349,11 +349,15 @@ def main(args):
         rmtree(target_dir)
         os.makedirs(target_dir)
 
-    not_converged, changed_despite_constraint = optimise(target_dir, filter_func, filter_kwargs, dispersion)
+    if not args.no_optimisation:
+        not_converged, changed_despite_constraint = optimise(target_dir, filter_func, filter_kwargs, dispersion)
 
     check_cif2cell_vesta(target_dir, target_dir, args.arch, args.model_path, dispersion)
 
-    return not_converged, changed_despite_constraint
+    try:
+        return not_converged, changed_despite_constraint
+    except NameError:
+        return [], []
 
 
 if __name__ == '__main__':
@@ -370,6 +374,8 @@ if __name__ == '__main__':
     parser.add_argument('-dd', '--disable-dispersion', action='store_true', help='Disables dispersion')
     parser.add_argument('-f', '--fmax', type=float, default=FMAX, 
                         help=f'The FMAX to use for optimisation ({FMAX} by default)')
+    parser.add_argument('-no', '--no-optimisation', action='store_true',
+                        help='Disables optimisation and causes only the cif2cell vs VESTA check to be performed.')
     args = parser.parse_args()
 
     not_converged, changed_despite_constraint = main(args)
