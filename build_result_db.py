@@ -202,9 +202,9 @@ def create_one_db(data, arch, model_path, cell):
     optimised_dir, _ = get_specific_dir(OPTIMISED_DIR, arch, model_path, cell)
 
     result = [['compound', 'id', 'instrument', 'method', 'temperature', 'optimisation',
-              'supercell', 'imaginary_modes', 'score', 'which', 'is_organic', 'is_inorganic',
-               'is_organometallic', 'is_polymeric', 'formula', 'n_rings',
-               'n_aromatic_rings', 'n_fused_rings']]
+              'supercell', 'imaginary_modes', 'score_filtered', 'score_direct', 'which',
+               'is_organic', 'is_inorganic', 'is_organometallic', 'is_polymeric', 'formula',
+               'n_rings', 'n_aromatic_rings', 'n_fused_rings']]
     for compound, value in data.items():
         compound_result_dir = os.path.join(results_dir, compound)
         try:
@@ -217,17 +217,18 @@ def create_one_db(data, arch, model_path, cell):
             supercell, imaginary = get_results(compound_result_dir)
 
             if abins_data is None:
-                score = None
+                score1, score2 = None, None
             else:
                 name = f'{compound}_{deuteration}.dat' if deuteration else f'{compound}.dat'
                 ins_data = parse_data_file(os.path.join(INS_DIR, name))
-                score = compare_abins_ins(abins_data, ins_data)
+                score1 = compare_abins_ins_filtered(abins_data, ins_data)
+                score2 = compare_abins_ins_direct(abins_data, ins_data)
 
             if not id:
                 id = get_id(compound)
 
             result.append([compound, id, instrument, method.lower(), temperature, opt,
-                           supercell, imaginary, score] + [None] * 9)
+                           supercell, imaginary, score1, score2] + [None] * 9)
 
     with open(os.path.join(RESULTS_DIR, result_name + '.csv'), 'w') as f:
         writer = csv.writer(f, delimiter=',')
@@ -250,7 +251,7 @@ def get_optimisation(compound, optimised_dir):
     return opt
 
 
-def compare_abins_ins(abins_data, ins_data):
+def compare_abins_ins_filtered(abins_data, ins_data):
     ins_x, ins_y = ins_data[:, 0], ins_data[:, 1]
     abins_x, abins_y = abins_data[0, :], abins_data[1, :]
 
@@ -274,6 +275,26 @@ def compare_abins_ins(abins_data, ins_data):
     return wasserstein_distance(ins_y_filtered, abins_y_filtered) * (np.max(abins_x) - np.min(abins_x))
 
 
+def compare_abins_ins_direct(abins_data, ins_data):
+    ins_x, ins_y = ins_data[:, 0], ins_data[:, 1]
+    abins_x, abins_y = abins_data[0, :], abins_data[1, :]
+
+    if ins_x[0] > abins_x[0]:
+        keep_idx = abins_x >= ins_x[0]
+        abins_x, abins_y = abins_x[keep_idx], abins_y[keep_idx]
+
+    if ins_x[-1] < abins_x[-1]:
+        keep_idx = abins_x <= ins_x[-1]
+        abins_x, abins_y = abins_x[keep_idx], abins_y[keep_idx]
+
+    ins_y /= np.trapz(ins_y, ins_x)
+    abins_y /= np.trapz(abins_y, abins_x)
+
+    ins_y_interpolated = interp1d(ins_x, ins_y, kind='cubic')(abins_x)
+
+    return wasserstein_distance(ins_y_interpolated, abins_y) * (np.max(abins_x) - np.min(abins_x))
+
+
 def update_one_db(arch, model_path, cell):
     from ccdc.search import TextNumericSearch
     from ccdc.entry import Entry
@@ -293,10 +314,10 @@ def update_one_db(arch, model_path, cell):
 
             if result:
                 result = result[0].entry
-                line[9] = 'organometallic' if result.is_organometallic else 'organic'
-                line[10] = result.is_organic
-                line[11] = False
-                line[12] = result.is_organometallic
+                line[10] = 'organometallic' if result.is_organometallic else 'organic'
+                line[11] = result.is_organic
+                line[12] = False
+                line[13] = result.is_organometallic
             else:
                 try:
                     with open(os.path.join(DATA_DIR, line[0] + '.cif'), 'r') as cif:
@@ -305,16 +326,16 @@ def update_one_db(arch, model_path, cell):
                     with open(os.path.join(HOME_DIR, 'difficult', line[0] + '.cif'), 'r') as cif:
                         result = Entry.from_string(''.join(cif.readlines()))
 
-                line[9] = 'organometallic' if result.is_organometallic else 'inorganic'
-                line[10] = False
-                line[11] = True
-                line[12] = result.is_organometallic
+                line[10] = 'organometallic' if result.is_organometallic else 'inorganic'
+                line[11] = False
+                line[12] = True
+                line[13] = result.is_organometallic
 
-            line[13] = result.is_polymeric
-            line[14] = result.molecule.formula
-            line[15] = len(result.molecule.rings)
-            line[16] = len([ring for ring in result.molecule.rings if ring.is_aromatic])
-            line[17] = len([ring for ring in result.molecule.rings if ring.is_fused])
+            line[14] = result.is_polymeric
+            line[15] = result.molecule.formula
+            line[16] = len(result.molecule.rings)
+            line[17] = len([ring for ring in result.molecule.rings if ring.is_aromatic])
+            line[18] = len([ring for ring in result.molecule.rings if ring.is_fused])
 
             data.append(line)
 
