@@ -21,6 +21,8 @@ OPTIMISED_DIR = os.path.join(DATA_DIR, 'optimised')
 
 KNOWN_MODELS = ['mace_mp', 'mace_off', 'chgnet', 'm3gnet', 'sevennet']
 
+DATA_COMPARISON_LOWER_BOUND = 50  # cm^{-1}
+
 
 def parse_csv_data() -> dict[str, dict[str, str]]:
     """
@@ -251,9 +253,12 @@ def get_optimisation(compound, optimised_dir):
     return opt
 
 
-def compare_abins_ins_filtered(abins_data, ins_data):
+def compare_abins_ins_filtered(abins_data, ins_data, lower_bound=DATA_COMPARISON_LOWER_BOUND):
     ins_x, ins_y = ins_data[:, 0], ins_data[:, 1]
     abins_x, abins_y = abins_data[0, :], abins_data[1, :]
+
+    keep_idx = ins_x >= lower_bound
+    ins_x, ins_y = ins_x[keep_idx], ins_y[keep_idx]
 
     if ins_x[0] > abins_x[0]:
         keep_idx = abins_x >= ins_x[0]
@@ -275,9 +280,12 @@ def compare_abins_ins_filtered(abins_data, ins_data):
     return wasserstein_distance(ins_y_filtered, abins_y_filtered) * (np.max(abins_x) - np.min(abins_x))
 
 
-def compare_abins_ins_direct(abins_data, ins_data):
+def compare_abins_ins_direct(abins_data, ins_data, lower_bound=DATA_COMPARISON_LOWER_BOUND):
     ins_x, ins_y = ins_data[:, 0], ins_data[:, 1]
     abins_x, abins_y = abins_data[0, :], abins_data[1, :]
+
+    keep_idx = ins_x >= lower_bound
+    ins_x, ins_y = ins_x[keep_idx], ins_y[keep_idx]
 
     if ins_x[0] > abins_x[0]:
         keep_idx = abins_x >= ins_x[0]
