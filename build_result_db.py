@@ -269,7 +269,7 @@ def compare_abins_ins_filtered(abins_data, ins_data):
     ins_y_filtered = filtfilt(b, a, ins_y_interpolated)
     abins_y_filtered = filtfilt(b, a, abins_y)
 
-    ins_y_filtered /= np.trapz(np.abs(ins_y_filtered), abins_x)
+    ins_y_filtered /= np.trapz(np.abs(ins_y_filtered), ins_x)
     abins_y_filtered /= np.trapz(np.abs(abins_y_filtered), abins_x)
 
     return wasserstein_distance(ins_y_filtered, abins_y_filtered) * (np.max(abins_x) - np.min(abins_x))
