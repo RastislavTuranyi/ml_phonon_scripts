@@ -33,6 +33,8 @@ HOME_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(HOME_DIR, 'results')
 INS_DIR = os.path.join(HOME_DIR, 'data', 'ins')
 
+MAX_STRIKES = 200
+
 
 def parse_csv_data() -> dict[str, dict[str, str]]:
     """
@@ -175,10 +177,10 @@ def read_data_file(path: str, encoding: str = 'utf8'):
             try:
                 out.append([float(val.strip()) for val in split_line])
             except ValueError:
-                if check_line(split_line) and strikes < 5:
+                if check_line(split_line) and strikes < MAX_STRIKES:
                     strikes += 1
                 else:
-                    print(line, delimiter, split_line)
+                    print(repr(line), delimiter, split_line, strikes)
                     raise
     return out
 
@@ -188,7 +190,7 @@ def check_line(line: list[str]) -> bool:
         try:
             float(val.strip())
         except ValueError:
-            if any(map(lambda x: x != '-', val.strip())):
+            if any(map(lambda x: x != '-', val.strip())) and not 'nan' in val:
                 return False
     return True
 
