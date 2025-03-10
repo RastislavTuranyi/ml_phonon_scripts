@@ -44,6 +44,13 @@ def write_weird(name, path, p, img, pc, imgc):
             f.write(f'{GRID[pc[:, idx] < 0]}\n')
 
 
+def clear_previous_assessment(dir: str):
+    for possible in ['ACCEPTABLE', 'FAILED', 'WEIRD-OK', 'WEIRD-FAIL', 'OK', 'GREAT']:
+        path = os.path.join(dir, possible)
+        if os.path.exists(path):
+            os.remove(path)
+
+
 def run_one(dir):
     compound = os.path.split(os.path.split(dir)[0])[-1]
     print(compound)
@@ -53,6 +60,8 @@ def run_one(dir):
         os.symlink(phonopy_file + '.yml', phonopy_file + '.yaml')
     except FileExistsError:
         pass
+
+    clear_previous_assessment(dir)
 
     out = os.path.join(dir, f'{compound}_frequencies.npy')
     out_correction = os.path.join(dir, f'{compound}_frequencies_corrected.npy')
