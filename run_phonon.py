@@ -142,10 +142,13 @@ def is_calculation_symmetric(work_dir: str,
     if not fully_force_symmetric:
         return True
 
-    supercell = np.load(supercell_path)
-    if len(supercell) == 3 or is_symmetric(supercell.reshape((3, 3))):
-        print(f'previous calculation was with a symmetric cell ({supercell})')
-        return True
+    try:
+        supercell = np.load(supercell_path)
+        if len(supercell) == 3 or is_symmetric(supercell.reshape((3, 3))):
+            print(f'previous calculation was with a symmetric cell ({supercell})')
+            return True
+    except FileNotFoundError:
+        supercell = 'None'
 
     print(f'previous calculation was with asymmetric supercell ({supercell}) and redo has been '
           f'requested')
