@@ -103,7 +103,7 @@ def parse_csv_data() -> dict[str, dict[str, str]]:
     return result
 
 
-def get_specific_dir(base_dir: str, arch: str, model_path: str, cell: bool) -> tuple[str, str]:
+def get_specific_dir(base_dir: str, arch: str, model_path: str, cell: bool | str) -> tuple[str, str]:
     if os.path.exists(model_path):
         p = os.path.split(model_path)[-1]
         name = '_'.join([arch, p])
@@ -112,10 +112,12 @@ def get_specific_dir(base_dir: str, arch: str, model_path: str, cell: bool) -> t
         name = '_'.join([arch, model_path])
         results_dir = os.path.join(base_dir, name)
 
-    if cell:
+    if cell is True or cell == 'cell':
         return os.path.join(results_dir, 'cell'), name + '_cell'
-    else:
+    elif cell is False or cell == 'no_cell':
         return os.path.join(results_dir, 'no_cell'), name + '_no_cell'
+    else:
+        raise Exception()
 
 
 def get_id(name: str) -> int | None:
