@@ -241,7 +241,7 @@ def create_one_db(data, arch, model_path, cell):
             result.append([compound, id, instrument, method.lower(), temperature, opt,
                            supercell, imaginary, score1, score2] + [None] * 9)
 
-    with open(os.path.join(RESULTS_DIR, result_name + '.csv'), 'w') as f:
+    with open(os.path.join(RESULTS_DIR, result_name + '.csv'), 'w', newline='') as f:
         writer = csv.writer(f, delimiter=',')
         writer.writerows(result)
 
@@ -362,7 +362,7 @@ def update_one_db(arch=None, model_path=None, cell=None, csv_path=None):
 
             data.append(line)
 
-    with open(csv_path, 'w') as f:
+    with open(csv_path, 'w', newline='') as f:
         writer = csv.writer(f, delimiter=',')
         writer.writerows(data)
 
