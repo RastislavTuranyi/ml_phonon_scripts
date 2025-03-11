@@ -168,11 +168,14 @@ def main(args):
             data = parse_csv_data()
             create_one_db(data, args.arch, args.model_path, args.cell)
     else:
-        create_multiple_db(args)
+        if args.update:
+            update_multiple_db()
+        else:
+            create_multiple_db()
 
-def create_multiple_db(args):
-    if not args.update:
-        data = parse_csv_data()
+
+def create_multiple_db():
+    data = parse_csv_data()
 
     runs = glob.glob(os.path.join(OPTIMISED_DIR, '*', ''))
     for run in runs:
@@ -193,10 +196,14 @@ def create_multiple_db(args):
         for cell_run in cell_runs:
             cell = os.path.split(os.path.dirname(cell_run))[-1]
             print(f'{name}_{cell}')
-            if args.update:
-                update_one_db(arch, model_path, cell)
-            else:
-                create_one_db(data, arch, model_path, cell)
+            create_one_db(data, arch, model_path, cell)
+
+
+def update_multiple_db():
+    runs = glob.glob(os.path.join(RESULTS_DIR, '*.csv'))
+    for run in runs:
+        print(os.path.split(run)[-1])
+        update_one_db(csv_path=run)
 
 
 def create_one_db(data, arch, model_path, cell):
@@ -303,14 +310,20 @@ def compare_abins_ins_direct(abins_data, ins_data, lower_bound=DATA_COMPARISON_L
     return wasserstein_distance(ins_y_interpolated, abins_y) * (np.max(abins_x) - np.min(abins_x))
 
 
-def update_one_db(arch, model_path, cell):
+def update_one_db(arch=None, model_path=None, cell=None, csv_path=None):
     from ccdc.search import TextNumericSearch
     from ccdc.entry import Entry
 
-    results_dir, result_name = get_specific_dir(RESULTS_DIR, arch, model_path, cell)
+    if csv_path is not None:
+        pass
+    elif arch is not None and model_path is not None and cell is not None:
+        _, result_name = get_specific_dir(RESULTS_DIR, arch, model_path, cell)
+        csv_path = os.path.join(RESULTS_DIR, result_name + '.csv')
+    else:
+        raise Exception()
 
     data = []
-    with open(os.path.join(RESULTS_DIR, result_name + '.csv'), 'r') as f:
+    with open(csv_path, 'r') as f:
         reader = csv.reader(f, delimiter=',')
         data.append(next(reader))
         for line in reader:
@@ -347,7 +360,7 @@ def update_one_db(arch, model_path, cell):
 
             data.append(line)
 
-    with open(os.path.join(RESULTS_DIR, result_name + '.csv'), 'w') as f:
+    with open(csv_path, 'w') as f:
         writer = csv.writer(f, delimiter=',')
         writer.writerows(data)
 
