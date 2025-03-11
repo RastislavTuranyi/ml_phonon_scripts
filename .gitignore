@@ -2,6 +2,7 @@ data
 results*
 nohup.out
 difficult
+*.tar.gz
 
 .idea
 

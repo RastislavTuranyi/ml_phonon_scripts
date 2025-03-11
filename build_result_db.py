@@ -117,7 +117,7 @@ def get_specific_dir(base_dir: str, arch: str, model_path: str, cell: bool | str
     elif cell is False or cell == 'no_cell':
         return os.path.join(results_dir, 'no_cell'), name + '_no_cell'
     else:
-        raise Exception()
+        raise Exception(str(cell))
 
 
 def get_id(name: str) -> int | None:
@@ -227,7 +227,7 @@ def create_one_db(data, arch, model_path, cell):
             opt = get_optimisation(compound, optimised_dir)
             supercell, imaginary = get_results(compound_result_dir)
 
-            if abins_data is None:
+            if abins_data is None or instrument == '?':
                 score1, score2 = None, None
             else:
                 name = f'{compound}_{deuteration}.dat' if deuteration else f'{compound}.dat'
