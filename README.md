@@ -16,3 +16,13 @@ much more computer-friendly (and phonopy compatible) VASP POSCAR format.
 4. `run_phonon.py` for running the phonon calculations on the optimised structure
 5. `analyse_phonons.py` for checking whether phonon calculations concluded successfully
 6. `plot_abins.py` for computing INS spectra from the phonon calculations and plotting the comparison to experimental spectra
+7. `build_result_db.py` for gathering the results from one or multiple runs into csv files. However, note that this script has to be run twice:
+   - first normally, which gathers data from MLIP runs
+   - second with `--update`, which adds extra information about systems from the CSD database
+
+Additionally, tools for analysing the results obtained from `build_result_db.py` are provided in 
+`data_analysis.py`. Furthermore, example data analyses on our data can be found in the jupyter 
+notebooks:
+
+- `data_analysis_full_dataset.ipynb`
+- `data_analysis_reduced_dataset.ipynb`
